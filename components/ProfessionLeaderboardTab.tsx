@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, Crown, Medal, Coins, Sparkles, Timer, RefreshCw } from 'lucide-react-native';
+import { Briefcase, Crown, Medal, Coins, Sparkles, Timer, RefreshCw, Trophy } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
 import { supabase } from '@/utils/supabase';
@@ -19,24 +19,59 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useProgress } from '@/contexts/ProgressContext';
 
 const ELIGIBILITY_MIN = 100;
+const PRIZE_FIRST = 500;
+const PRIZE_SECOND = 250;
+const PRIZE_THIRD = 100;
 
 type ProfessionRow = {
   profession_id: number;
   profession_code: string;
   profession_name: string;
   emoji: string | null;
+
   total_donated: number;
   rank: number;
   is_my_profession: boolean;
+
+  // repeated on every row by the RPC for convenience
+  my_donated?: number;
+  my_eligible?: boolean;
+  my_coins?: number;
+  month_start?: string;
+  month_end?: string;
 };
 
-type MyDonationRow = {
-  month_start: string;
-  profession_id: number | null;
-  profession_code: string | null;
-  profession_name: string | null;
-  my_total_donated: number;
-  profession_total_donated: number;
+type ClaimRewardResult = {
+  ok?: boolean;
+
+  month_start?: string;
+  month_end?: string;
+
+  eligible?: boolean;
+  my_donated?: number;
+
+  my_profession_id?: number | null;
+  my_profession_code?: string | null;
+  my_profession_name?: string | null;
+  my_profession_emoji?: string | null;
+
+  profession_rank?: number | null;
+  prize_amount?: number;
+
+  claimed?: boolean;
+  already_claimed?: boolean;
+
+  message?: string | null;
+
+  // Optional: array of top 3 professions for last month
+  winners?: Array<{
+    rank: number;
+    profession_id: number;
+    profession_code: string;
+    profession_name: string;
+    emoji: string | null;
+    total_donated: number;
+  }> | null;
 };
 
 function safeNum(v: any): number {
@@ -135,13 +170,17 @@ export default function ProfessionLeaderboardTab() {
   // Use "as any" so this file won’t break if your context typings differ
   const progressCtx = useProgress() as any;
   const progress = progressCtx.progress;
-  const spendCoins: undefined | ((amount: number, reason?: string) => void) = progressCtx.spendCoins;
+  const spendCoins: undefined | ((amount: number, reason?: string) => boolean) = progressCtx.spendCoins;
+  const addCoins: undefined | ((amount: number, reason?: string) => void) = progressCtx.addCoins;
 
   const coinsAvailable = Math.max(0, safeNum(progress?.stats?.coins));
 
   const [endsIn, setEndsIn] = useState<string>(formatEndsInToMonthEnd());
   const [donateAmount, setDonateAmount] = useState<number>(0);
   const [donating, setDonating] = useState(false);
+
+  const [claiming, setClaiming] = useState(false);
+  const [claimInfo, setClaimInfo] = useState<ClaimRewardResult | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setEndsIn(formatEndsInToMonthEnd()), 30_000);
@@ -162,25 +201,21 @@ export default function ProfessionLeaderboardTab() {
     },
     enabled: !!session,
     staleTime: 15_000,
+    refetchInterval: 15_000,
     retry: 1,
   });
 
-  const myDonationQuery = useQuery<MyDonationRow | null>({
-    queryKey: ['profession', 'my_donation'],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_my_profession_month_donation');
-      if (error) throw error;
-      return ((data as any)?.[0] ?? null) as any;
-    },
-    enabled: !!session,
-    staleTime: 10_000,
-    retry: 1,
-  });
+  const rows = leaderboardQuery.data ?? [];
 
-  const myProfessionName = myDonationQuery.data?.profession_name ?? null;
-  const myTotalDonated = safeNum(myDonationQuery.data?.my_total_donated);
+  const myProfessionRow = useMemo(() => {
+    return rows.find((r) => !!r.is_my_profession) ?? null;
+  }, [rows]);
+
+  // The RPC repeats these on every row. Use the first row to read "meta".
+  const meta = rows?.[0] ?? null;
+  const myTotalDonated = safeNum((meta as any)?.my_donated);
+  const eligible = !!(meta as any)?.my_eligible || myTotalDonated >= ELIGIBILITY_MIN;
   const neededToQualify = Math.max(0, ELIGIBILITY_MIN - myTotalDonated);
-  const eligible = myTotalDonated >= ELIGIBILITY_MIN;
 
   const refreshAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['profession'] });
@@ -189,7 +224,7 @@ export default function ProfessionLeaderboardTab() {
   const handleDonate = useCallback(async () => {
     if (!session) return;
 
-    if (!myDonationQuery.data?.profession_id) {
+    if (!myProfessionRow?.profession_id) {
       Alert.alert('Pick a profession', 'Choose your profession in Profile first.');
       router.push('/(tabs)/profile');
       return;
@@ -228,7 +263,49 @@ export default function ProfessionLeaderboardTab() {
     } finally {
       setDonating(false);
     }
-  }, [session, myDonationQuery.data, donateAmount, coinsAvailable, router, refreshAll, spendCoins]);
+  }, [session, myProfessionRow?.profession_id, donateAmount, coinsAvailable, router, refreshAll, spendCoins]);
+
+  const handleClaimReward = useCallback(async () => {
+    if (!session) return;
+    if (claiming) return;
+
+    setClaiming(true);
+    try {
+      const { data, error } = await supabase.rpc('claim_profession_monthly_reward');
+      if (error) throw error;
+
+      const res = (data ?? {}) as any as ClaimRewardResult;
+      setClaimInfo(res);
+
+      const prize = safeNum((res as any)?.prize_amount);
+      const claimed = (res as any)?.claimed === true;
+      const already = (res as any)?.already_claimed === true;
+      const rankRaw = (res as any)?.profession_rank;
+      const rank = rankRaw == null ? null : safeNum(rankRaw);
+      const myDon = safeNum((res as any)?.my_donated);
+      const isEligible = (res as any)?.eligible === true;
+
+      if (claimed && prize > 0) {
+        if (typeof addCoins === 'function') {
+          addCoins(prize, 'profession_monthly_reward');
+        }
+        Alert.alert('Reward claimed!', `+${prize} coins added to your balance.\n\nYour profession finished #${rank ?? '?'} last month.`);
+      } else if (already && prize > 0) {
+        Alert.alert('Already claimed', `You already claimed +${prize} coins for last month.`);
+      } else if (!isEligible) {
+        Alert.alert('Not eligible', `You donated ${myDon}/${ELIGIBILITY_MIN} coins last month. Donate at least ${ELIGIBILITY_MIN} to qualify.`);
+      } else {
+        // eligible but no prize
+        Alert.alert('No reward this time', 'Your profession did not place Top 3 last month.');
+      }
+
+      refreshAll();
+    } catch (e: any) {
+      Alert.alert('Could not claim reward', e?.message ?? String(e));
+    } finally {
+      setClaiming(false);
+    }
+  }, [session, claiming, addCoins, refreshAll]);
 
   // ---------------- UI states ----------------
   if (leaderboardQuery.isLoading) {
@@ -253,8 +330,6 @@ export default function ProfessionLeaderboardTab() {
       </View>
     );
   }
-
-  const rows = leaderboardQuery.data ?? [];
 
   return (
     <View>
@@ -284,7 +359,7 @@ export default function ProfessionLeaderboardTab() {
             <Text style={styles.rewardRank}>1st</Text>
             <View style={styles.rewardCoinsRow}>
               <Coins size={14} color="#8A5A00" />
-              <Text style={styles.rewardCoinsText}>+500</Text>
+              <Text style={styles.rewardCoinsText}>+{PRIZE_FIRST}</Text>
             </View>
           </LinearGradient>
 
@@ -293,7 +368,7 @@ export default function ProfessionLeaderboardTab() {
             <Text style={styles.rewardRank}>2nd</Text>
             <View style={styles.rewardCoinsRow}>
               <Coins size={14} color="#374151" />
-              <Text style={styles.rewardCoinsText}>+250</Text>
+              <Text style={styles.rewardCoinsText}>+{PRIZE_SECOND}</Text>
             </View>
           </LinearGradient>
 
@@ -302,7 +377,7 @@ export default function ProfessionLeaderboardTab() {
             <Text style={styles.rewardRank}>3rd</Text>
             <View style={styles.rewardCoinsRow}>
               <Coins size={14} color="#7C2D12" />
-              <Text style={styles.rewardCoinsText}>+100</Text>
+              <Text style={styles.rewardCoinsText}>+{PRIZE_THIRD}</Text>
             </View>
           </LinearGradient>
         </View>
@@ -322,7 +397,7 @@ export default function ProfessionLeaderboardTab() {
 
         <Text style={styles.mutedSmall}>You represent</Text>
         <Text style={styles.bigName} numberOfLines={1}>
-          {myProfessionName ?? '—'}
+          {myProfessionRow?.profession_name ?? '—'}
         </Text>
 
         <View style={styles.statPillsRow}>
@@ -361,7 +436,7 @@ export default function ProfessionLeaderboardTab() {
           max={coinsAvailable}
           value={donateAmount}
           onChange={setDonateAmount}
-          disabled={coinsAvailable <= 0 || !myDonationQuery.data?.profession_id}
+          disabled={coinsAvailable <= 0 || !myProfessionRow?.profession_id}
         />
 
         <View style={styles.sliderMetaRow}>
@@ -384,6 +459,41 @@ export default function ProfessionLeaderboardTab() {
         </Pressable>
       </View>
 
+      {/* ===================== CLAIM LAST MONTH REWARD ===================== */}
+      <View style={[styles.card, styles.claimCard]}>
+        <View style={styles.contributionHeader}>
+          <Text style={styles.sectionTitle}>Claim last month’s reward</Text>
+
+          <Pressable style={styles.smallRefreshBtn} onPress={refreshAll}>
+            <RefreshCw size={14} color={Colors.textSecondary} />
+            <Text style={styles.smallRefreshText}>Refresh</Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.claimHint}>
+          If your profession finished Top 3 last month and you donated at least {ELIGIBILITY_MIN} coins, you can claim a prize.
+        </Text>
+
+        {claimInfo?.message ? (
+          <View style={styles.claimStatusRow}>
+            <Text style={styles.claimStatusText}>{claimInfo.message}</Text>
+          </View>
+        ) : null}
+
+        <Pressable
+          style={[styles.claimBtn, claiming && { opacity: 0.6 }]}
+          disabled={claiming}
+          onPress={handleClaimReward}
+        >
+          {claiming ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Trophy size={16} color="#fff" />
+          )}
+          <Text style={styles.claimBtnText}>Check / Claim</Text>
+        </Pressable>
+      </View>
+
       {/* ===================== RANKINGS ===================== */}
       <View style={styles.rankingsBlock}>
         <Text style={styles.sectionTitle}>Rankings</Text>
@@ -403,7 +513,7 @@ export default function ProfessionLeaderboardTab() {
                   {r.emoji ? `${r.emoji} ` : ''}{r.profession_name}
                   {r.is_my_profession ? ' • You' : ''}
                 </Text>
-                <Text style={styles.rankSub}>{r.total_donated.toLocaleString()} donated</Text>
+                <Text style={styles.rankSub}>{safeNum(r.total_donated).toLocaleString()} donated</Text>
               </View>
             </View>
           </View>
@@ -483,32 +593,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)',
   },
-  rewardRank: { fontSize: 12, fontWeight: '900' as const, color: '#111827' },
-  rewardCoinsRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  rewardCoinsText: { fontSize: 14, fontWeight: '900' as const, color: '#111827' },
+  rewardRank: { fontSize: 12, fontWeight: '900' as const, color: Colors.text },
+  rewardCoinsRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rewardCoinsText: { fontSize: 12, fontWeight: '900' as const },
+
   rewardHint: { marginTop: 10, fontSize: 12, fontWeight: '700' as const, color: Colors.textSecondary },
 
-  contributionCard: {
-    borderColor: Colors.primary + '55',
-    borderWidth: 1.5,
-  },
-  contributionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  contributionCard: {},
+  contributionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 },
   sectionTitle: { fontSize: 14, fontWeight: '900' as const, color: Colors.text },
 
   pickProfBtn: {
     backgroundColor: Colors.primaryLight,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
     borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
+    borderColor: Colors.primary + '25',
   },
-  pickProfBtnText: { fontSize: 11, fontWeight: '900' as const, color: Colors.primary },
+  pickProfBtnText: { fontSize: 12, fontWeight: '900' as const, color: Colors.primary },
 
-  mutedSmall: { marginTop: 10, fontSize: 12, fontWeight: '700' as const, color: Colors.textTertiary },
-  bigName: { marginTop: 2, fontSize: 18, fontWeight: '900' as const, color: Colors.text },
+  mutedSmall: { fontSize: 11, fontWeight: '700' as const, color: Colors.textSecondary },
+  bigName: { fontSize: 18, fontWeight: '900' as const, color: Colors.text, marginTop: 2 },
 
-  statPillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  statPillsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' as const, marginTop: 10 },
   statPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -516,105 +624,125 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceAlt,
     borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   statPillText: { fontSize: 12, fontWeight: '800' as const, color: Colors.textSecondary },
 
-  needPill: { borderColor: '#F59E0B55', backgroundColor: '#FFFBEB' },
-  needText: { color: '#B45309' },
-  okPill: { borderColor: '#22C55E55', backgroundColor: '#F0FDF4' },
+  needPill: { borderColor: '#F97316' + '55', backgroundColor: '#FFF7ED' },
+  okPill: { borderColor: '#22C55E' + '55', backgroundColor: '#F0FDF4' },
+  needText: { color: '#9A3412' },
   okText: { color: '#166534' },
 
   eligibilityBar: {
     height: 10,
-    borderRadius: 999,
     backgroundColor: Colors.surfaceAlt,
+    borderRadius: 999,
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: Colors.border,
-    overflow: 'hidden',
-    marginTop: 10,
+    marginTop: 12,
   },
-  eligibilityFill: {
-    height: '100%',
-    backgroundColor: Colors.primary,
-    borderRadius: 999,
-  },
+  eligibilityFill: { height: 10, backgroundColor: Colors.primary },
 
   sliderHint: { marginTop: 12, fontSize: 12, fontWeight: '700' as const, color: Colors.textSecondary },
-
   sliderTrack: {
-    marginTop: 10,
-    height: 14,
+    height: 18,
     borderRadius: 999,
     backgroundColor: Colors.surfaceAlt,
     borderWidth: 1,
     borderColor: Colors.border,
+    marginTop: 10,
     overflow: 'hidden',
     justifyContent: 'center',
   },
-  sliderFill: {
-    position: 'absolute',
-    left: 0,
-    height: '100%',
-    backgroundColor: Colors.primary,
-  },
+  sliderFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: Colors.primary },
   sliderThumb: {
     position: 'absolute',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 999,
     backgroundColor: '#fff',
     borderWidth: 2,
     borderColor: Colors.primary,
-    top: -6,
-    transform: [{ translateX: -12 }],
+    transform: [{ translateX: -10 }],
   },
-
   sliderMetaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  sliderMeta: { fontSize: 12, fontWeight: '800' as const, color: Colors.textTertiary },
+  sliderMeta: { fontSize: 12, fontWeight: '800' as const, color: Colors.textSecondary },
 
   donateBtn: {
     marginTop: 12,
     backgroundColor: Colors.primary,
     borderRadius: 14,
     paddingVertical: 12,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    flexDirection: 'row',
   },
   donateBtnText: { color: '#fff', fontWeight: '900' as const, fontSize: 14 },
 
-  rankingsBlock: { marginTop: 4 },
+  claimCard: {},
+  claimHint: { fontSize: 12, fontWeight: '700' as const, color: Colors.textSecondary, marginTop: 4 },
 
-  rankRow: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
-    marginTop: 8,
-  },
-  rankRowMine: {
-    borderColor: Colors.primary + '55',
-    backgroundColor: Colors.primaryLight + '55',
-  },
-  rankLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-
-  rankCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
+  claimStatusRow: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 12,
     backgroundColor: Colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  claimStatusText: { fontSize: 12, fontWeight: '800' as const, color: Colors.textSecondary },
+
+  claimBtn: {
+    marginTop: 12,
+    backgroundColor: '#111827',
+    borderRadius: 14,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    flexDirection: 'row',
+  },
+  claimBtnText: { color: '#fff', fontWeight: '900' as const, fontSize: 14 },
+
+  smallRefreshBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: Colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  smallRefreshText: { fontSize: 12, fontWeight: '800' as const, color: Colors.textSecondary },
+
+  rankingsBlock: { paddingHorizontal: 2 },
+  rankRow: {
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    marginTop: 10,
+  },
+  rankRowMine: { borderColor: Colors.primary + '55', backgroundColor: Colors.primaryLight + '33' },
+  rankLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rankCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surfaceAlt,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   rankCircleText: { fontSize: 12, fontWeight: '900' as const, color: Colors.textSecondary },
-
-  rankName: { fontSize: 14, fontWeight: '900' as const, color: Colors.text },
-  rankSub: { marginTop: 3, fontSize: 12, fontWeight: '700' as const, color: Colors.textSecondary },
+  rankName: { fontSize: 13, fontWeight: '900' as const, color: Colors.text },
+  rankSub: { fontSize: 12, fontWeight: '700' as const, color: Colors.textSecondary, marginTop: 2 },
 });
