@@ -205,7 +205,7 @@ export default function LeaderboardScreen() {
         const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
         return {
           user_id: row.user_id ?? row.id ?? '',
-          display_name: row.display_name ?? row.username ?? row.email ?? 'Unknown',
+          display_name: row.display_name ?? row.username ?? 'Unknown',
           avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
           xp_this_week: isNaN(xpValue) ? 0 : xpValue,
           level: Number(row.level ?? row.lvl ?? 1),
