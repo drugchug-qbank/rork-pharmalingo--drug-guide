@@ -9,13 +9,24 @@ import { getChapterById } from '@/constants/chapters';
 import { getDrugById } from '@/constants/drugData';
 import { useProgress } from '@/contexts/ProgressContext';
 import { useXpSync } from '@/contexts/XpSyncContext';
-import { generateQuestionsForLesson, generatePracticeQuestions, generateSpacedRepetitionQuestions, generateMistakeQuestions, generateMistakeReviewQuestions } from '@/utils/quizGenerator';
+import {
+  generateQuestionsForLesson,
+  generateQuestionsFromDrugIds,
+  generatePracticeQuestions,
+  generateSpacedRepetitionQuestions,
+  generateMistakeQuestions,
+  generateMistakeReviewQuestions,
+  generateMasteringQuestions,
+} from '@/utils/quizGenerator';
 import { QuizQuestion, MistakeBankEntry } from '@/constants/types';
 import QuizOption from '@/components/QuizOption';
 import MatchingQuestion from '@/components/MatchingQuestion';
+import ClozeQuestion from '@/components/ClozeQuestion';
+import MultiSelectQuestion from '@/components/MultiSelectQuestion';
 import ProgressBar from '@/components/ProgressBar';
 import MascotAnimated, { MascotMood } from '@/components/MascotAnimated';
 import OutOfHeartsModal from '@/components/OutOfHeartsModal';
+import { getIntroQuestionsForPart } from '@/utils/introGenerator';
 
 type OptionState = 'default' | 'correct' | 'incorrect' | 'disabled';
 
@@ -58,7 +69,22 @@ export default function LessonScreen() {
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { progress, completeLesson, loseHeart, addCoins, updateDrugMastery, getDueForReviewDrugIds, getLowMasteryDrugIds, addMistakes, removeMistakesByDrug, trackPracticeQuest, trackComboQuest } = useProgress();
+  const {
+    progress,
+    completeLesson,
+    loseHeart,
+    addCoins,
+    updateDrugMastery,
+    updateConceptMastery,
+    isConceptMastered,
+    getUnlockedDrugIds,
+    getDueForReviewDrugIds,
+    getLowMasteryDrugIds,
+    addMistakes,
+    removeMistakesByDrug,
+    trackPracticeQuest,
+    trackComboQuest,
+  } = useProgress();
   const { logXpEvent } = useXpSync();
 
   const isPractice = mode === 'practice' || mode === 'spaced' || mode === 'mistakes' || mode === 'mistakes-review';
@@ -99,17 +125,52 @@ export default function LessonScreen() {
     if (mode === 'practice') {
       return generatePracticeQuestions(10);
     }
+    if (mode === 'mastery' && chapter) {
+      const chapterDrugIds = Array.from(new Set(chapter.parts.flatMap(p => p.drugIds)));
+      return generateMasteringQuestions(chapterDrugIds, 30);
+    }
     if (part) {
-      return generateQuestionsForLesson(part.drugIds, part.questionCount);
+      // 1) Optional intro teaching (shown until the student proves the core concepts)
+      const introAll = getIntroQuestionsForPart(part.id, part.drugIds);
+      // Only show the intro items the student hasn't mastered (or doesn't have a conceptId).
+      const introPending = introAll.filter(q => !q.conceptId || !isConceptMastered(q.conceptId));
+      const introQuestions = introPending.slice(0, 5);
+      const introCount = introQuestions.length;
+
+      // 2) Mix in 2–4 review questions from previously unlocked drugs
+      const unlocked = getUnlockedDrugIds();
+      const due = getDueForReviewDrugIds();
+      const low = getLowMasteryDrugIds();
+      const reviewPool = Array.from(new Set([...due, ...low, ...unlocked]))
+        .filter(id => id && !part.drugIds.includes(id));
+
+      // Add headroom so we can include intro + spaced review without shrinking the core lesson too much.
+      const desiredTotal = Math.min(14, Math.max(10, (part.questionCount ?? 12) + 4));
+      const minNew = 6;
+
+      let reviewCount = Math.floor(Math.random() * 3) + 2; // 2–4
+      reviewCount = Math.min(reviewCount, reviewPool.length);
+      const maxReviewGivenMinNew = Math.max(0, desiredTotal - introCount - minNew);
+      reviewCount = Math.min(reviewCount, maxReviewGivenMinNew);
+
+      const newCount = Math.max(0, desiredTotal - introCount - reviewCount);
+      const quizQuestions = generateQuestionsForLesson(part.drugIds, newCount, 'quiz');
+      const reviewDrugIds = reviewCount > 0 ? reviewPool.sort(() => Math.random() - 0.5).slice(0, reviewCount) : [];
+      const reviewQuestions = reviewCount > 0 ? generateQuestionsFromDrugIds(reviewDrugIds, reviewCount, 'review') : [];
+
+      const mixed = [...quizQuestions, ...reviewQuestions].sort(() => Math.random() - 0.5);
+      return [...introQuestions, ...mixed];
     }
     return [];
   });
 
   const [sessionMistakes, setSessionMistakes] = useState<MistakeBankEntry[]>([]);
   const isMistakesMode = mode === 'mistakes' || mode === 'mistakes-review';
+  const activeLessonIdForMistakes = mode === 'mastery' && chapterId ? `mastery-${chapterId}` : (partId ?? 'practice');
 
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [answerCorrect, setAnswerCorrect] = useState<boolean | null>(null);
   const [optionStates, setOptionStates] = useState<Record<string, OptionState>>({});
   const [correctCount, setCorrectCount] = useState<number>(0);
   const [showFact, setShowFact] = useState<boolean>(false);
@@ -172,7 +233,14 @@ export default function LessonScreen() {
       updateDrugMastery(p.drugId, allCorrectFirstTry);
     });
 
+    if (currentQuestion.conceptId) {
+      updateConceptMastery(currentQuestion.conceptId, allCorrectFirstTry);
+    }
+
+    setAnswerCorrect(allCorrectFirstTry);
+
     if (allCorrectFirstTry) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setCorrectCount(prev => prev + 1);
       setConsecutiveCorrect(prev => prev + 1);
       const newCombo = combo + 1;
@@ -187,21 +255,22 @@ export default function LessonScreen() {
         });
       }
     } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setConsecutiveCorrect(0);
       setCombo(0);
       setMascotMood('sad');
       setMascotMessage(getRandomMessage(MASCOT_MESSAGES_INCORRECT));
-      if (!isMistakesMode) {
+      if (!isMistakesMode && currentQuestion.phase !== 'intro') {
         matchPairs.forEach(p => {
           setSessionMistakes(prev => [...prev, {
             drugId: p.drugId,
             questionType: 'matching',
             dateISO: new Date().toISOString(),
-            lessonId: partId ?? 'practice',
+            lessonId: activeLessonIdForMistakes,
           }]);
         });
       }
-      if (!isPractice) {
+      if (!isPractice && currentQuestion.phase !== 'intro') {
         loseHeart();
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
         if (progress.stats.hearts <= 1) {
@@ -224,17 +293,41 @@ export default function LessonScreen() {
       }),
     ]).start();
 
-    setSelectedOption('matching-done');
+    setSelectedOption('answered');
     setShowFact(true);
-  }, [currentQuestion, isPractice, loseHeart, resultSlide, mascotMessageFade, getRandomMessage, progress.stats.hearts, updateDrugMastery]);
+  }, [
+    currentQuestion,
+    isPractice,
+    loseHeart,
+    resultSlide,
+    mascotMessageFade,
+    getRandomMessage,
+    progress.stats.hearts,
+    updateDrugMastery,
+    updateConceptMastery,
+    combo,
+    highestCombo,
+    handleComboMilestone,
+    isMistakesMode,
+    activeLessonIdForMistakes,
+    removeMistakesByDrug,
+  ]);
 
   const handleSelectOption = useCallback((option: string) => {
-    if (selectedOption !== null || !currentQuestion) return;
+    if (selectedOption !== null || !currentQuestion || !currentQuestion.correctAnswer) return;
 
     setSelectedOption(option);
     const isCorrect = option === currentQuestion.correctAnswer;
 
-    updateDrugMastery(currentQuestion.drugId, isCorrect);
+    setAnswerCorrect(isCorrect);
+
+    if (currentQuestion.drugId) {
+      updateDrugMastery(currentQuestion.drugId, isCorrect);
+    }
+
+    if (currentQuestion.conceptId) {
+      updateConceptMastery(currentQuestion.conceptId, isCorrect);
+    }
 
     if (isCorrect) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -253,7 +346,7 @@ export default function LessonScreen() {
       }
       setMascotMessage(getRandomMessage(MASCOT_MESSAGES_CORRECT));
 
-      if (isMistakesMode) {
+      if (isMistakesMode && currentQuestion.drugId) {
         removeMistakesByDrug(currentQuestion.drugId, currentQuestion.type);
       }
 
@@ -275,16 +368,16 @@ export default function LessonScreen() {
       }
       setMascotMessage(getRandomMessage(MASCOT_MESSAGES_INCORRECT));
 
-      if (!isMistakesMode) {
+      if (!isMistakesMode && currentQuestion.drugId && currentQuestion.phase !== 'intro') {
         setSessionMistakes(prev => [...prev, {
           drugId: currentQuestion.drugId,
           questionType: currentQuestion.type,
           dateISO: new Date().toISOString(),
-          lessonId: partId ?? 'practice',
+          lessonId: activeLessonIdForMistakes,
         }]);
       }
 
-      if (!isPractice) {
+      if (!isPractice && currentQuestion.phase !== 'intro') {
         loseHeart();
 
         Animated.sequence([
@@ -344,7 +437,130 @@ export default function LessonScreen() {
     ]).start();
 
     setShowFact(true);
-  }, [selectedOption, currentQuestion, isPractice, loseHeart, resultSlide, consecutiveCorrect, combo, highestCombo, progress.stats.hearts, mascotMessageFade, getRandomMessage, heartScaleAnim, heartShakeAnim, updateDrugMastery]);
+  }, [
+    selectedOption,
+    currentQuestion,
+    isPractice,
+    loseHeart,
+    resultSlide,
+    consecutiveCorrect,
+    combo,
+    highestCombo,
+    progress.stats.hearts,
+    mascotMessageFade,
+    getRandomMessage,
+    heartScaleAnim,
+    heartShakeAnim,
+    updateDrugMastery,
+    updateConceptMastery,
+    isMistakesMode,
+    activeLessonIdForMistakes,
+    removeMistakesByDrug,
+  ]);
+
+  const handleStructuredAnswer = useCallback(
+    (isCorrect: boolean) => {
+      if (selectedOption !== null || !currentQuestion) return;
+
+      setSelectedOption('answered');
+      setAnswerCorrect(isCorrect);
+
+      if (currentQuestion.drugId) {
+        updateDrugMastery(currentQuestion.drugId, isCorrect);
+      }
+      if (currentQuestion.conceptId) {
+        updateConceptMastery(currentQuestion.conceptId, isCorrect);
+      }
+
+      if (isCorrect) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setCorrectCount(prev => prev + 1);
+        const newConsecutive = consecutiveCorrect + 1;
+        setConsecutiveCorrect(newConsecutive);
+        const newCombo = combo + 1;
+        setCombo(newCombo);
+        if (newCombo > highestCombo) setHighestCombo(newCombo);
+        handleComboMilestone(newCombo);
+
+        if (newConsecutive >= 3) {
+          setMascotMood('celebrating');
+        } else {
+          setMascotMood('happy');
+        }
+        setMascotMessage(getRandomMessage(MASCOT_MESSAGES_CORRECT));
+
+        if (isMistakesMode && currentQuestion.drugId) {
+          removeMistakesByDrug(currentQuestion.drugId, currentQuestion.type);
+        }
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setConsecutiveCorrect(0);
+        setCombo(0);
+
+        if (progress.stats.hearts <= 1) {
+          setMascotMood('shocked');
+        } else {
+          setMascotMood('sad');
+        }
+        setMascotMessage(getRandomMessage(MASCOT_MESSAGES_INCORRECT));
+
+        if (!isMistakesMode && currentQuestion.drugId && currentQuestion.phase !== 'intro') {
+          setSessionMistakes(prev => [
+            ...prev,
+            {
+              drugId: currentQuestion.drugId,
+              questionType: currentQuestion.type,
+              dateISO: new Date().toISOString(),
+              lessonId: activeLessonIdForMistakes,
+            },
+          ]);
+        }
+
+        if (!isPractice && currentQuestion.phase !== 'intro') {
+          loseHeart();
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          if (progress.stats.hearts <= 1) {
+            setTimeout(() => setShowOutOfHearts(true), 800);
+          }
+        }
+      }
+
+      mascotMessageFade.setValue(0);
+      Animated.parallel([
+        Animated.spring(resultSlide, {
+          toValue: 0,
+          useNativeDriver: true,
+          friction: 8,
+        }),
+        Animated.timing(mascotMessageFade, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      setShowFact(true);
+    },
+    [
+      selectedOption,
+      currentQuestion,
+      updateDrugMastery,
+      updateConceptMastery,
+      consecutiveCorrect,
+      combo,
+      highestCombo,
+      handleComboMilestone,
+      getRandomMessage,
+      isMistakesMode,
+      isPractice,
+      loseHeart,
+      mascotMessageFade,
+      activeLessonIdForMistakes,
+      progress.stats.hearts,
+      removeMistakesByDrug,
+      resultSlide,
+    ]
+  );
 
   const handleComboMilestone = useCallback((newCombo: number) => {
     if (newCombo === 5) {
@@ -406,8 +622,10 @@ export default function LessonScreen() {
           ? prevStreak
           : 1;
 
-      if (!isPractice && partId) {
-        completeLesson(partId, earnedXp, correctCount, totalQuestions, highestCombo);
+      const completionLessonId = mode === 'mastery' && chapterId ? `mastery-${chapterId}` : partId;
+
+      if (!isPractice && completionLessonId) {
+        completeLesson(completionLessonId, earnedXp, correctCount, totalQuestions, highestCombo);
         const xpToSync = Math.max(0, Math.round(earnedXp));
         console.log('[XpSync] sending xpToSync=', xpToSync, 'earnedXp=', earnedXp);
         logXpEvent(xpToSync, 'lesson_complete');
@@ -453,10 +671,31 @@ export default function LessonScreen() {
     resultSlide.setValue(100);
     setCurrentIndex(prev => prev + 1);
     setSelectedOption(null);
+    setAnswerCorrect(null);
     setOptionStates({});
     setShowFact(false);
 
-  }, [currentIndex, totalQuestions, isPractice, partId, chapterId, correctCount, completeLesson, resultSlide, router, progress.stats, highestCombo, comboBonusCoins]);
+  }, [
+    currentIndex,
+    totalQuestions,
+    isPractice,
+    partId,
+    chapterId,
+    mode,
+    correctCount,
+    completeLesson,
+    resultSlide,
+    router,
+    progress.stats,
+    highestCombo,
+    comboBonusCoins,
+    logXpEvent,
+    trackPracticeQuest,
+    trackComboQuest,
+    isMistakesMode,
+    addMistakes,
+    sessionMistakes,
+  ]);
 
   const handleClose = useCallback(() => {
     router.back();
@@ -471,16 +710,25 @@ export default function LessonScreen() {
     );
   }
 
-  const drug = getDrugById(currentQuestion.drugId);
+  const drug = currentQuestion.drugId ? getDrugById(currentQuestion.drugId) : undefined;
 
   const getQuestionTypeLabel = (type: string) => {
     switch (type) {
       case 'brand_to_generic': return 'Brand → Generic';
       case 'generic_to_brand': return 'Generic → Brand';
       case 'indication': return 'Indications';
+      case 'not_indication': return 'Indications';
       case 'side_effect': return 'Side Effects';
+      case 'not_side_effect': return 'Side Effects';
       case 'drug_class': return 'Drug Class';
+      case 'class_comparison': return 'Drug Class';
+      case 'suffix': return 'Naming Pattern';
       case 'dosing': return 'Dosing';
+      case 'clinical_pearl': return 'Clinical Pearl';
+      case 'key_fact': return 'Clinical Pearl';
+      case 'true_false': return 'Quick Check';
+      case 'cloze': return 'Fill in the Blank';
+      case 'multi_select': return 'Select All';
       case 'matching': return 'Brand ↔ Generic';
       default: return 'Question';
     }
@@ -491,15 +739,24 @@ export default function LessonScreen() {
       case 'brand_to_generic': return '💊';
       case 'generic_to_brand': return '🏷️';
       case 'indication': return '🩺';
+      case 'not_indication': return '🩺';
       case 'side_effect': return '⚠️';
+      case 'not_side_effect': return '⚠️';
       case 'drug_class': return '📋';
+      case 'class_comparison': return '📋';
       case 'dosing': return '💉';
+      case 'suffix': return '🔤';
+      case 'clinical_pearl': return '💡';
+      case 'key_fact': return '💡';
+      case 'true_false': return '✅';
+      case 'cloze': return '🧩';
+      case 'multi_select': return '🧠';
       case 'matching': return '🔗';
       default: return '❓';
     }
   };
 
-  const isCorrectAnswer = selectedOption === currentQuestion.correctAnswer;
+  const isCorrectAnswer = answerCorrect === true;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
@@ -557,6 +814,20 @@ export default function LessonScreen() {
               <Text style={styles.questionTypeText}>
                 {getQuestionTypeLabel(currentQuestion.type)}
               </Text>
+
+              {currentQuestion.phase === 'intro' ? (
+                <View style={[styles.phasePill, styles.phasePillIntro]}>
+                  <Text style={[styles.phaseText, styles.phaseTextIntro]}>LEARN</Text>
+                </View>
+              ) : currentQuestion.phase === 'review' ? (
+                <View style={[styles.phasePill, styles.phasePillReview]}>
+                  <Text style={[styles.phaseText, styles.phaseTextReview]}>REVIEW</Text>
+                </View>
+              ) : currentQuestion.phase === 'mastery' ? (
+                <View style={[styles.phasePill, styles.phasePillMastery]}>
+                  <Text style={[styles.phaseText, styles.phaseTextMastery]}>MASTER</Text>
+                </View>
+              ) : null}
             </View>
             <Text style={styles.questionCounter}>
               {currentIndex + 1} / {totalQuestions}
@@ -579,6 +850,19 @@ export default function LessonScreen() {
                 pairs={currentQuestion.matchPairs}
                 shuffledGenerics={currentQuestion.shuffledGenerics}
                 onComplete={handleMatchingComplete}
+              />
+            ) : currentQuestion.type === 'cloze' && currentQuestion.cloze ? (
+              <ClozeQuestion
+                cloze={currentQuestion.cloze}
+                onComplete={handleStructuredAnswer}
+                disabled={showFact}
+              />
+            ) : currentQuestion.type === 'multi_select' && currentQuestion.correctAnswers ? (
+              <MultiSelectQuestion
+                options={currentQuestion.options}
+                correctAnswers={currentQuestion.correctAnswers}
+                onComplete={handleStructuredAnswer}
+                disabled={showFact}
               />
             ) : (
               currentQuestion.options.map((option, index) => (
@@ -604,7 +888,16 @@ export default function LessonScreen() {
         }}
       />
 
-      {showFact && drug && (
+      {(() => {
+        const factText = currentQuestion.explanation ?? drug?.keyFact;
+        const correctAnswerText =
+          currentQuestion.type === 'multi_select'
+            ? currentQuestion.correctAnswers?.join(', ')
+            : currentQuestion.correctAnswer;
+
+        if (!showFact || !factText) return null;
+
+        return (
         <Animated.View
           style={[
             styles.factBar,
@@ -633,8 +926,12 @@ export default function LessonScreen() {
               </View>
             </View>
             <Text style={styles.factText}>
-              💡 {drug.keyFact}
+              💡 {factText}
             </Text>
+
+            {!isCorrectAnswer && correctAnswerText ? (
+              <Text style={styles.correctAnswerText}>✅ Correct answer: {correctAnswerText}</Text>
+            ) : null}
           </View>
           <Pressable
             onPress={handleNext}
@@ -651,7 +948,8 @@ export default function LessonScreen() {
             <ArrowRight size={18} color="#FFFFFF" />
           </Pressable>
         </Animated.View>
-      )}
+        );
+      })()}
     </View>
   );
 }
@@ -783,6 +1081,35 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     color: Colors.primary,
   },
+  phasePill: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  phaseText: {
+    fontSize: 10,
+    fontWeight: '900' as const,
+    letterSpacing: 0.5,
+  },
+  phasePillIntro: {
+    backgroundColor: Colors.primary,
+  },
+  phaseTextIntro: {
+    color: '#FFFFFF',
+  },
+  phasePillReview: {
+    backgroundColor: Colors.surfaceAlt,
+  },
+  phaseTextReview: {
+    color: Colors.textSecondary,
+  },
+  phasePillMastery: {
+    backgroundColor: Colors.accentLight,
+  },
+  phaseTextMastery: {
+    color: Colors.accent,
+  },
   questionCounter: {
     fontSize: 14,
     fontWeight: '700' as const,
@@ -854,6 +1181,13 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: '500' as const,
     marginLeft: 54,
+  },
+  correctAnswerText: {
+    marginTop: 8,
+    marginLeft: 54,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    fontWeight: '600' as const,
   },
   nextButton: {
     flexDirection: 'row',

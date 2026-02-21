@@ -27,15 +27,68 @@ export interface MatchPair {
   drugId: string;
 }
 
+export type QuizQuestionPhase = 'intro' | 'quiz' | 'review' | 'mastery';
+
+export type QuizQuestionType =
+  | 'brand_to_generic'
+  | 'generic_to_brand'
+  | 'indication'
+  | 'not_indication'
+  | 'side_effect'
+  | 'not_side_effect'
+  | 'dosing'
+  | 'drug_class'
+  | 'key_fact'
+  | 'class_comparison'
+  | 'suffix'
+  | 'clinical_pearl'
+  | 'true_false'
+  | 'matching'
+  | 'cloze'
+  | 'multi_select';
+
+export interface ClozeSpec {
+  /**
+   * Text split into parts surrounding blanks.
+   * Example for 1 blank: ["ACE inhibitors end in ", "."]
+   */
+  parts: string[];
+  /** Word bank shown to the user */
+  wordBank: string[];
+  /** Correct words in order of blanks */
+  correctWords: string[];
+}
+
 export interface QuizQuestion {
   id: string;
-  type: 'brand_to_generic' | 'generic_to_brand' | 'indication' | 'side_effect' | 'dosing' | 'drug_class' | 'matching';
+  type: QuizQuestionType;
   question: string;
-  correctAnswer: string;
+  /** Single-answer questions (multiple choice, true/false, etc.) */
+  correctAnswer?: string;
+  /** Multi-answer questions (select all that apply) */
+  correctAnswers?: string[];
   options: string[];
-  drugId: string;
+  /** Some concept questions may not map 1:1 to a specific drug */
+  drugId?: string;
   matchPairs?: MatchPair[];
   shuffledGenerics?: string[];
+  cloze?: ClozeSpec;
+
+  /**
+   * Optional explanation shown after answering. If missing, we fall back to drug.keyFact.
+   */
+  explanation?: string;
+
+  /**
+   * Optional concept identifier (e.g., "m1-p2-ace-suffix") used to decide
+   * whether to show (or re-show) introductory teaching items.
+   */
+  conceptId?: string;
+
+  /**
+   * Optional label for session mixing (intro vs quiz vs review vs mastery).
+   */
+  phase?: QuizQuestionPhase;
 }
 
 export interface LessonPart {
@@ -102,6 +155,13 @@ export interface DrugMastery {
   nextReviewISO: string;
 }
 
+export interface ConceptMastery {
+  mastered: boolean;
+  correctStreak: number;
+  wrongSinceMastered: number;
+  lastSeenISO: string;
+}
+
 export interface DailyQuest {
   id: number;
   title: string;
@@ -127,6 +187,7 @@ export interface UserProgress {
   completedLessons: Record<string, number>;
   chapterProgress: Record<string, number>;
   drugMastery: Record<string, DrugMastery>;
+  conceptMastery: Record<string, ConceptMastery>;
   mistakeBank: MistakeBankEntry[];
   level: number;
 }
@@ -170,6 +231,7 @@ export const DEFAULT_PROGRESS: UserProgress = {
   completedLessons: {},
   chapterProgress: {},
   drugMastery: {},
+  conceptMastery: {},
   mistakeBank: [],
   level: 1,
 };
