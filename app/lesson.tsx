@@ -27,6 +27,8 @@ import ProgressBar from '@/components/ProgressBar';
 import MascotAnimated, { MascotMood } from '@/components/MascotAnimated';
 import OutOfHeartsModal from '@/components/OutOfHeartsModal';
 import { getIntroQuestionsForPart } from '@/utils/introGenerator';
+import TeachingSlides from '@/components/TeachingSlides';
+import { getTeachingDeckForPart } from '@/utils/teachingSlides';
 
 type OptionState = 'default' | 'correct' | 'incorrect' | 'disabled';
 
@@ -80,6 +82,8 @@ export default function LessonScreen() {
     updateDrugMastery,
     updateConceptMastery,
     isConceptMastered,
+    hasSeenTeachingSlides,
+    markTeachingSlidesSeen,
     getUnlockedDrugIds,
     getDueForReviewDrugIds,
     getLowMasteryDrugIds,
@@ -95,6 +99,15 @@ export default function LessonScreen() {
 
   const chapter = chapterId ? getChapterById(chapterId) : undefined;
   const part = chapter?.parts.find(p => p.id === partId);
+
+  // Pre-quiz teaching deck (shown only once per subsection)
+  const teachingDeck = part ? getTeachingDeckForPart(part.id) : null;
+  const [teachingDismissed, setTeachingDismissed] = useState(false);
+
+  useEffect(() => {
+    // If the user navigates to another part, reset local dismissal.
+    setTeachingDismissed(false);
+  }, [partId]);
 
   const mistakesParam = useLocalSearchParams<{ mistakesJson?: string }>().mistakesJson;
   const mistakesDrugIdsParam = useLocalSearchParams<{ mistakeDrugIds?: string }>().mistakeDrugIds;
@@ -750,6 +763,58 @@ export default function LessonScreen() {
     router.back();
   }, [router]);
 
+  const handleTeachingDone = useCallback(() => {
+    if (part?.id) {
+      markTeachingSlidesSeen(part.id);
+    }
+    setTeachingDismissed(true);
+  }, [part?.id, markTeachingSlidesSeen]);
+
+  const showTeachingSlides =
+    !!teachingDeck &&
+    !!part &&
+    !isPractice &&
+    mode !== 'mastery' &&
+    !hasSeenTeachingSlides(part.id) &&
+    !teachingDismissed &&
+    currentIndex === 0 &&
+    selectedOption === null &&
+    !showFact;
+
+  if (showTeachingSlides && teachingDeck) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+
+        <View style={styles.topBar}>
+          <Pressable onPress={handleClose} style={styles.closeButton} testID="close-lesson">
+            <X size={22} color={Colors.textSecondary} />
+          </Pressable>
+
+          <View style={styles.quickTeachWrap}>
+            <View style={styles.quickTeachPill}>
+              <Text style={styles.quickTeachText}>Quick Teach</Text>
+            </View>
+          </View>
+
+          <Animated.View
+            style={[
+              styles.heartBadge,
+              {
+                transform: [{ translateX: heartShakeAnim }, { scale: heartScaleAnim }],
+              },
+            ]}
+          >
+            <Heart size={16} color={Colors.accent} fill={Colors.accent} />
+            <Text style={styles.heartText}>{progress.stats.hearts}</Text>
+          </Animated.View>
+        </View>
+
+        <TeachingSlides deck={teachingDeck} onDone={handleTeachingDone} onSkip={handleTeachingDone} />
+      </View>
+    );
+  }
+
   if (!currentQuestion) {
     return (
       <View style={styles.container}>
@@ -896,18 +961,21 @@ export default function LessonScreen() {
           <View style={styles.optionsContainer}>
             {currentQuestion.type === 'matching' && currentQuestion.matchPairs && currentQuestion.shuffledGenerics ? (
               <MatchingQuestion
+                key={currentQuestion.id}
                 pairs={currentQuestion.matchPairs}
                 shuffledGenerics={currentQuestion.shuffledGenerics}
                 onComplete={handleMatchingComplete}
               />
             ) : currentQuestion.type === 'cloze' && currentQuestion.cloze ? (
               <ClozeQuestion
+                key={currentQuestion.id}
                 cloze={currentQuestion.cloze}
                 onComplete={handleStructuredAnswer}
                 disabled={showFact}
               />
             ) : currentQuestion.type === 'multi_select' && currentQuestion.correctAnswers ? (
               <MultiSelectQuestion
+                key={currentQuestion.id}
                 options={currentQuestion.options}
                 correctAnswers={currentQuestion.correctAnswers}
                 onComplete={handleStructuredAnswer}
@@ -1026,6 +1094,25 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     flex: 1,
+  },
+  quickTeachWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickTeachPill: {
+    backgroundColor: Colors.primaryLight,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  quickTeachText: {
+    color: Colors.primary,
+    fontSize: 14,
+    fontWeight: '900' as const,
+    letterSpacing: 0.2,
   },
   heartBadge: {
     flexDirection: 'row',
