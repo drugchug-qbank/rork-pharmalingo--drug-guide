@@ -65,10 +65,12 @@ type ProfessionRow = {
   profession_name: string;
   profession_code: string;
   emoji: string;
-  points: number;
+  total_donated: number;
   rank: number;
   is_my_profession: boolean;
-  user_donated_this_month: number;
+  my_donated: number;
+  my_eligible: boolean;
+  my_coins: number;
   month_start: string;
   month_end: string;
 };
@@ -189,13 +191,15 @@ export default function ProfileScreen() {
         profession_id: safeNumber(r.profession_id, 0),
         profession_name: String(r.profession_name ?? ''),
         profession_code: String(r.profession_code ?? ''),
-        emoji: String(r.emoji ?? '👤'),
-        points: safeNumber(r.points, 0),
-        rank: safeNumber(r.rank, 0),
-        is_my_profession: !!r.is_my_profession,
-        user_donated_this_month: safeNumber(r.user_donated_this_month, 0),
-        month_start: String(r.month_start ?? ''),
-        month_end: String(r.month_end ?? ''),
+emoji: String(r.emoji ?? '👤'),
+total_donated: safeNumber(r.total_donated, 0),
+rank: safeNumber(r.rank, 0),
+is_my_profession: !!r.is_my_profession,
+my_donated: safeNumber(r.my_donated, 0),
+my_eligible: !!r.my_eligible,
+my_coins: safeNumber(r.my_coins, 0),
+month_start: String(r.month_start ?? ''),
+month_end: String(r.month_end ?? ''),
       }));
       setProfessionRows(parsed);
     } catch (e: any) {
@@ -247,7 +251,7 @@ export default function ProfileScreen() {
   }, [professionRows]);
 
   const donatedThisMonth = useMemo(() => {
-    return safeNumber(professionRows?.[0]?.user_donated_this_month, 0);
+  return safeNumber(professionRows?.[0]?.my_donated, 0);
   }, [professionRows]);
 
   const professionLocked = donatedThisMonth > 0;
