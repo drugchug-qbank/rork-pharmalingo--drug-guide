@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Colors from '@/constants/colors';
 
@@ -19,6 +19,12 @@ export default function MultiSelectQuestion({ options, correctAnswers, onComplet
   const correctSet = useMemo(() => new Set(correctAnswers), [correctAnswers]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitted, setSubmitted] = useState(false);
+
+  // Reset between questions (otherwise selections can persist if two multi-select questions appear back-to-back)
+  useEffect(() => {
+    setSelected(new Set());
+    setSubmitted(false);
+  }, [options, correctAnswers]);
 
   const toggle = (opt: string) => {
     if (disabled || submitted) return;

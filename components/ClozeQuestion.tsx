@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Colors from '@/constants/colors';
 import { ClozeSpec } from '@/constants/types';
@@ -21,6 +21,13 @@ export default function ClozeQuestion({ cloze, onComplete, disabled }: Props) {
 
   const [filled, setFilled] = useState<(string | null)[]>(Array(blanks).fill(null));
   const [submitted, setSubmitted] = useState(false);
+
+  // Reset state whenever we move to a *new* cloze prompt (i.e., next question).
+  // Without this, React reuses component state and the previous answer can "stick" on the next question.
+  useEffect(() => {
+    setFilled(Array(blanks).fill(null));
+    setSubmitted(false);
+  }, [blanks, cloze.parts, cloze.correctWords, cloze.wordBank]);
 
   const usedWords = useMemo(() => new Set(filled.filter(Boolean) as string[]), [filled]);
   const allFilled = filled.every((w) => !!w);
