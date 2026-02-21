@@ -849,18 +849,21 @@ export default function LessonScreen() {
           <View style={styles.optionsContainer}>
             {currentQuestion.type === 'matching' && currentQuestion.matchPairs && currentQuestion.shuffledGenerics ? (
               <MatchingQuestion
+                key={currentQuestion.id}
                 pairs={currentQuestion.matchPairs}
                 shuffledGenerics={currentQuestion.shuffledGenerics}
                 onComplete={handleMatchingComplete}
               />
             ) : currentQuestion.type === 'cloze' && currentQuestion.cloze ? (
               <ClozeQuestion
+                key={currentQuestion.id}
                 cloze={currentQuestion.cloze}
                 onComplete={handleStructuredAnswer}
                 disabled={showFact}
               />
             ) : currentQuestion.type === 'multi_select' && currentQuestion.correctAnswers ? (
               <MultiSelectQuestion
+                key={currentQuestion.id}
                 options={currentQuestion.options}
                 correctAnswers={currentQuestion.correctAnswers}
                 onComplete={handleStructuredAnswer}
