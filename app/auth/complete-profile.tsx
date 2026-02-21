@@ -46,9 +46,37 @@ export default function CompleteProfileScreen() {
   const handleComplete = async () => {
     setError('');
 
-    const usernameTrim = username.trim();
+    const usernameRaw = username.trim();
+    const usernameTrim = usernameRaw.startsWith('@') ? usernameRaw.slice(1).trim() : usernameRaw;
+
     if (!usernameTrim) {
       setError('Username is required');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    // Never allow an email to be used as a public username
+    if (usernameTrim.includes('@')) {
+      setError('Username cannot be an email address');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    // Basic rules (keep in sync with AuthContext validation)
+    if (/\s/.test(usernameTrim)) {
+      setError('Username cannot contain spaces');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (!/^[A-Za-z0-9_.]+$/.test(usernameTrim)) {
+      setError('Username can only use letters, numbers, _ and .');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (usernameTrim.length < 3 || usernameTrim.length > 20) {
+      setError('Username must be 3–20 characters');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
@@ -61,7 +89,7 @@ export default function CompleteProfileScreen() {
       // 1) Save profile fields (username + display name + school name)
       await completeProfile(
         usernameTrim,
-        usernameTrim,
+        usernameTrim.toLowerCase(),
         chosenSchoolName
       );
 
