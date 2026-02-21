@@ -17,7 +17,7 @@ export function getTeachingDeckForPart(partId: string): TeachingSlideDeck | null
             id: 'ace',
             emoji: '🫀',
             title: 'ACE Inhibitors',
-            subtitle: 'Suffix: -pril',
+            subtitle: 'All ACE inhibitors end in -PRIL',
             facts: [
               '🎯 Use: HTN • HFrEF • post‑MI • CKD/DM (↓ proteinuria)',
               '🧬 MOA: ACE↓ → Ang II↓ + Aldo↓ → vasodilate + ↓Na/H₂O',
@@ -30,7 +30,7 @@ export function getTeachingDeckForPart(partId: string): TeachingSlideDeck | null
             id: 'arb',
             emoji: '🫀',
             title: 'ARBs',
-            subtitle: 'Suffix: -sartan',
+            subtitle: 'All ARBs end in -SARTAN',
             facts: [
               '🎯 Use: HTN • HFrEF • CKD/DM (ACE‑cough alternative)',
               '🧬 MOA: AT₁ block → similar benefits; no bradykinin cough',

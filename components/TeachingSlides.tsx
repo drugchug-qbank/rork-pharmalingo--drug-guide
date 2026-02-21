@@ -26,6 +26,14 @@ function splitFact(fact: string): { icon: string; label?: string; body: string }
   return { icon, body: text };
 }
 
+function splitSuffixHighlight(text: string): { prefix: string; suffix?: string; rest?: string } {
+  const trimmed = (text ?? '').trim();
+  if (!trimmed) return { prefix: '' };
+  const match = trimmed.match(/^(.*?)(-[A-Za-z]+)(.*)$/);
+  if (!match) return { prefix: trimmed };
+  return { prefix: match[1] ?? '', suffix: match[2] ?? undefined, rest: match[3] ?? '' };
+}
+
 type Props = {
   deck: TeachingSlideDeck;
   onDone: () => void;
@@ -37,6 +45,7 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
   const [factIndex, setFactIndex] = useState(0);
 
   const slide = deck.slides[slideIndex];
+  const highlightParts = useMemo(() => splitSuffixHighlight(slide?.subtitle ?? ''), [slide?.subtitle]);
 
   const totalFacts = useMemo(
     () => deck.slides.reduce((sum, s) => sum + (s.facts?.length ?? 0), 0),
@@ -144,16 +153,24 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
       <ProgressBar progress={progressPercent} height={10} color={Colors.primary} />
 
       <View style={styles.slideCard}>
-        <View style={styles.slideTitleRow}>
-          <Text style={styles.slideEmoji}>{slide.emoji ?? '💡'}</Text>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.slideTitle}>{slide.title}</Text>
-            {slide.subtitle ? (
-              <View style={styles.subtitlePill}>
-                <Text style={styles.subtitlePillText}>{slide.subtitle}</Text>
-              </View>
-            ) : null}
+        <View style={styles.slideHeader}>
+          <View style={styles.slideEmojiBubble}>
+            <Text style={styles.slideEmoji}>{slide.emoji ?? '💡'}</Text>
           </View>
+
+          <Text style={styles.slideTitle}>{slide.title}</Text>
+
+          {slide.subtitle ? (
+            <View style={styles.highlightBox}>
+              <Text style={styles.highlightText}>
+                {highlightParts.prefix}
+                {highlightParts.suffix ? (
+                  <Text style={styles.highlightSuffix}>{highlightParts.suffix}</Text>
+                ) : null}
+                {highlightParts.rest}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <Text style={styles.sectionTitle}>Key hits</Text>
@@ -249,12 +266,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   deckTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '900' as const,
     color: Colors.text,
   },
   slideCounter: {
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.textSecondary,
     fontWeight: '700' as const,
   },
@@ -272,7 +289,7 @@ const styles = StyleSheet.create({
   skipText: {
     color: Colors.textSecondary,
     fontWeight: '800' as const,
-    fontSize: 13,
+    fontSize: 14,
   },
   slideCard: {
     flex: 1,
@@ -286,63 +303,74 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 2,
-    gap: 10,
+    gap: 12,
   },
-  slideTitleRow: {
-    flexDirection: 'row',
+  slideHeader: {
     alignItems: 'center',
     gap: 10,
   },
-  slideEmoji: {
-    fontSize: 28,
-  },
-  slideTitle: {
-    fontSize: 18,
-    fontWeight: '900' as const,
-    color: Colors.text,
-  },
-  slideSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    fontWeight: '700' as const,
-    marginTop: 2,
-  },
-  subtitlePill: {
-    marginTop: 6,
-    alignSelf: 'flex-start',
+  slideEmojiBubble: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
     backgroundColor: Colors.primaryLight,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
     borderWidth: 1,
     borderColor: Colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  subtitlePillText: {
+  slideEmoji: {
+    fontSize: 30,
+  },
+  slideTitle: {
+    fontSize: 22,
+    fontWeight: '900' as const,
+    color: Colors.text,
+    textAlign: 'center' as const,
+  },
+  highlightBox: {
+    alignSelf: 'stretch',
+    backgroundColor: Colors.primaryLight,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    borderRadius: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  highlightText: {
     color: Colors.primaryDark,
     fontWeight: '900' as const,
-    fontSize: 12,
+    fontSize: 18,
+    textAlign: 'center' as const,
     letterSpacing: 0.2,
   },
+  highlightSuffix: {
+    color: Colors.primary,
+    fontWeight: '900' as const,
+    fontSize: 20,
+  },
   sectionTitle: {
-    marginTop: 8,
-    fontSize: 14,
+    marginTop: 2,
+    fontSize: 16,
     fontWeight: '900' as const,
     color: Colors.secondary,
     letterSpacing: 0.2,
+    textAlign: 'center' as const,
   },
   factsScroll: {
     flex: 1,
   },
   factsContent: {
     paddingVertical: 4,
-    gap: 10,
+    gap: 9,
   },
   factRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     backgroundColor: Colors.background,
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 12,
     borderRadius: 16,
     borderWidth: 1,
@@ -364,8 +392,8 @@ const styles = StyleSheet.create({
   },
   factText: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: 15,
+    lineHeight: 21,
     color: Colors.text,
     fontWeight: '700' as const,
   },
@@ -384,7 +412,7 @@ const styles = StyleSheet.create({
   },
   nextText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '900' as const,
   },
   footerHint: {
