@@ -200,6 +200,36 @@ export default function LessonScreen() {
     return messages[Math.floor(Math.random() * messages.length)];
   }, []);
 
+  const handleComboMilestone = useCallback((newCombo: number) => {
+    if (newCombo === 5) {
+      addCoins(5, 'Combo 5 bonus');
+      setComboBonusCoins(prev => prev + 5);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Animated.sequence([
+        Animated.timing(comboScaleAnim, { toValue: 1.6, duration: 150, useNativeDriver: true }),
+        Animated.spring(comboScaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+      ]).start();
+    } else if (newCombo === 10) {
+      addCoins(10, 'Combo 10 bonus');
+      setComboBonusCoins(prev => prev + 10);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Animated.sequence([
+        Animated.timing(comboScaleAnim, { toValue: 1.8, duration: 150, useNativeDriver: true }),
+        Animated.spring(comboScaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
+      ]).start();
+    } else if (newCombo >= 2) {
+      Animated.sequence([
+        Animated.timing(comboScaleAnim, { toValue: 1.25, duration: 100, useNativeDriver: true }),
+        Animated.spring(comboScaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
+      ]).start();
+    }
+    if (newCombo >= 1) {
+      comboOpacityAnim.setValue(1);
+    }
+  }, [addCoins, comboScaleAnim, comboOpacityAnim]);
+
+
+
   useEffect(() => {
     fadeAnim.setValue(0);
     slideAnim.setValue(30);
@@ -561,34 +591,6 @@ export default function LessonScreen() {
       resultSlide,
     ]
   );
-
-  const handleComboMilestone = useCallback((newCombo: number) => {
-    if (newCombo === 5) {
-      addCoins(5, 'Combo 5 bonus');
-      setComboBonusCoins(prev => prev + 5);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Animated.sequence([
-        Animated.timing(comboScaleAnim, { toValue: 1.6, duration: 150, useNativeDriver: true }),
-        Animated.spring(comboScaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
-      ]).start();
-    } else if (newCombo === 10) {
-      addCoins(10, 'Combo 10 bonus');
-      setComboBonusCoins(prev => prev + 10);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Animated.sequence([
-        Animated.timing(comboScaleAnim, { toValue: 1.8, duration: 150, useNativeDriver: true }),
-        Animated.spring(comboScaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
-      ]).start();
-    } else if (newCombo >= 2) {
-      Animated.sequence([
-        Animated.timing(comboScaleAnim, { toValue: 1.25, duration: 100, useNativeDriver: true }),
-        Animated.spring(comboScaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
-      ]).start();
-    }
-    if (newCombo >= 1) {
-      comboOpacityAnim.setValue(1);
-    }
-  }, [addCoins, comboScaleAnim, comboOpacityAnim]);
 
   const handleNext = useCallback(() => {
     if (currentIndex + 1 >= totalQuestions) {
