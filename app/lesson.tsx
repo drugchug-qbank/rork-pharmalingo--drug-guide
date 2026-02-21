@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, ScrollView } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { View, Text, StyleSheet, Pressable, Animated, ScrollView, Alert } from 'react-native';
+import { useLocalSearchParams, useRouter, Stack, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Heart, Zap, ArrowRight, Coins } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -27,8 +27,6 @@ import ProgressBar from '@/components/ProgressBar';
 import MascotAnimated, { MascotMood } from '@/components/MascotAnimated';
 import OutOfHeartsModal from '@/components/OutOfHeartsModal';
 import { getIntroQuestionsForPart } from '@/utils/introGenerator';
-import TeachingSlides from '@/components/TeachingSlides';
-import { getTeachingDeckForPart } from '@/utils/teachingSlides';
 
 type OptionState = 'default' | 'correct' | 'incorrect' | 'disabled';
 
@@ -70,6 +68,9 @@ export default function LessonScreen() {
     mode?: string;
   }>();
   const router = useRouter();
+  const navigation = useNavigation<any>();
+  const allowExitRef = useRef(false);
+  const exitPromptOpenRef = useRef(false);
   const insets = useSafeAreaInsets();
   const {
     progress,
@@ -79,8 +80,6 @@ export default function LessonScreen() {
     updateDrugMastery,
     updateConceptMastery,
     isConceptMastered,
-    hasSeenTeachingSlides,
-    markTeachingSlidesSeen,
     getUnlockedDrugIds,
     getDueForReviewDrugIds,
     getLowMasteryDrugIds,
@@ -96,15 +95,6 @@ export default function LessonScreen() {
 
   const chapter = chapterId ? getChapterById(chapterId) : undefined;
   const part = chapter?.parts.find(p => p.id === partId);
-
-  // Pre-quiz teaching deck (shown only once per subsection on first attempt)
-  const teachingDeck = part ? getTeachingDeckForPart(part.id) : null;
-  const shouldShowTeachingDeck =
-    !!part &&
-    !!teachingDeck &&
-    !isPractice &&
-    mode !== 'mastery' &&
-    !hasSeenTeachingSlides(part.id);
 
   const mistakesParam = useLocalSearchParams<{ mistakesJson?: string }>().mistakesJson;
   const mistakesDrugIdsParam = useLocalSearchParams<{ mistakeDrugIds?: string }>().mistakeDrugIds;
@@ -141,35 +131,33 @@ export default function LessonScreen() {
     if (mode === 'mastery' && chapter) {
       const chapterDrugIds = Array.from(new Set(chapter.parts.flatMap(p => p.drugIds)));
       return generateMasteringQuestions(chapterDrugIds, 30);
-    }
-    if (part) {
-      // 1) Optional intro teaching (shown until the student proves the core concepts)
+    }    if (part) {
       const introAll = getIntroQuestionsForPart(part.id, part.drugIds);
-      // Only show the intro items the student hasn't mastered (or doesn't have a conceptId).
-      const introPending = introAll.filter(q => !q.conceptId || !isConceptMastered(q.conceptId));
-      const introQuestions = introPending.slice(0, 5);
+      const introPending = introAll.filter((q) => {
+        if (!q.conceptId) return true;
+        return !isConceptMastered(q.conceptId);
+      });
+
+      // We aim for 10–12 *part-specific* questions (intro + quiz), plus 2–4 review questions from previous sections.
+      const targetPartQuestions = Math.min(12, Math.max(10, part.questionCount ?? 12));
+      const maxIntro = 4;
+      const introQuestions = introPending.slice(0, Math.min(maxIntro, targetPartQuestions));
       const introCount = introQuestions.length;
 
-      // 2) Mix in 2–4 review questions from previously unlocked drugs
-      const unlocked = getUnlockedDrugIds();
-      const due = getDueForReviewDrugIds();
-      const low = getLowMasteryDrugIds();
-      const reviewPool = Array.from(new Set([...due, ...low, ...unlocked]))
-        .filter(id => id && !part.drugIds.includes(id));
-
-      // Add headroom so we can include intro + spaced review without shrinking the core lesson too much.
-      const desiredTotal = Math.min(14, Math.max(10, (part.questionCount ?? 12) + 4));
-      const minNew = 6;
+      // Review pool from previous unlocked drugs (spaced repetition + weakest ones)
+      const unlocked = getUnlockedDrugIds().filter((id) => !part.drugIds.includes(id));
+      const due = getDueForReviewDrugIds().filter((id) => !part.drugIds.includes(id));
+      const low = getLowMasteryDrugIds().filter((id) => !part.drugIds.includes(id));
+      const reviewPool = Array.from(new Set([ ...due, ...low, ...unlocked ]));
 
       let reviewCount = Math.floor(Math.random() * 3) + 2; // 2–4
       reviewCount = Math.min(reviewCount, reviewPool.length);
-      const maxReviewGivenMinNew = Math.max(0, desiredTotal - introCount - minNew);
-      reviewCount = Math.min(reviewCount, maxReviewGivenMinNew);
 
-      const newCount = Math.max(0, desiredTotal - introCount - reviewCount);
-      const quizQuestions = generateQuestionsForLesson(part.drugIds, newCount, 'quiz');
+      const quizCount = Math.max(0, targetPartQuestions - introCount);
+      const quizQuestions = generateQuestionsForLesson(part.drugIds, quizCount, 'quiz');
       const reviewDrugIds = reviewCount > 0 ? reviewPool.sort(() => Math.random() - 0.5).slice(0, reviewCount) : [];
-      const reviewQuestions = reviewCount > 0 ? generateQuestionsFromDrugIds(reviewDrugIds, reviewCount, 'review') : [];
+      const reviewQuestions =
+        reviewCount > 0 ? generateQuestionsFromDrugIds(reviewDrugIds, reviewCount, 'review') : [];
 
       const mixed = [...quizQuestions, ...reviewQuestions].sort(() => Math.random() - 0.5);
       return [...introQuestions, ...mixed];
@@ -208,6 +196,50 @@ export default function LessonScreen() {
   const currentQuestion = questions[currentIndex];
   const totalQuestions = questions.length;
   const progressPercent = totalQuestions > 0 ? ((currentIndex) / totalQuestions) * 100 : 0;
+
+  // Guard against accidentally leaving mid-quiz (back gesture, header back, etc.).
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+      // Allow internal navigations (e.g., completing a quiz) to proceed without a penalty.
+      if (allowExitRef.current) return;
+
+      const inProgress = questions.length > 0 && currentIndex < questions.length;
+      if (!inProgress) return;
+
+      // Prevent default behavior of leaving the screen
+      e.preventDefault();
+
+      // Avoid stacking alerts if multiple navigation events fire
+      if (exitPromptOpenRef.current) return;
+      exitPromptOpenRef.current = true;
+
+      Alert.alert(
+        'Are you sure?',
+        'You will lose a heart if you leave now.',
+        [
+          {
+            text: 'Stay',
+            style: 'cancel',
+            onPress: () => {
+              exitPromptOpenRef.current = false;
+            },
+          },
+          {
+            text: 'Leave',
+            style: 'destructive',
+            onPress: () => {
+              exitPromptOpenRef.current = false;
+              allowExitRef.current = true;
+              loseHeart();
+              navigation.dispatch(e.data.action);
+            },
+          },
+        ]
+      );
+    });
+
+    return unsubscribe;
+  }, [navigation, questions.length, currentIndex, loseHeart]);
 
   const getRandomMessage = useCallback((messages: string[]) => {
     return messages[Math.floor(Math.random() * messages.length)];
@@ -660,6 +692,8 @@ export default function LessonScreen() {
         console.log(`[MistakeBank] Saved ${sessionMistakes.length} mistakes from this session`);
       }
 
+      allowExitRef.current = true;
+
       router.replace({
         pathname: '/lesson-complete',
         params: {
@@ -715,43 +749,6 @@ export default function LessonScreen() {
   const handleClose = useCallback(() => {
     router.back();
   }, [router]);
-
-  // --- First-time teaching slides (shown before the quiz starts) ---
-  if (shouldShowTeachingDeck && teachingDeck && part) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
-        <Stack.Screen options={{ headerShown: false }} />
-
-        <View style={styles.topBar}>
-          <Pressable onPress={handleClose} style={styles.closeButton} testID="close-lesson">
-            <X size={22} color={Colors.textSecondary} />
-          </Pressable>
-
-          <View style={styles.progressContainer}>
-            <View style={styles.teachingPill}>
-              <Text style={styles.teachingPillText}>Quick Teach</Text>
-            </View>
-          </View>
-
-          <View style={styles.heartBadge}>
-            <Heart size={16} color={Colors.accent} fill={Colors.accent} />
-            <Text style={styles.heartText}>{progress.stats.hearts}</Text>
-          </View>
-        </View>
-
-        <TeachingSlides
-          deck={teachingDeck}
-          onDone={() => {
-            // Mark as seen so it won't show again on re-takes.
-            markTeachingSlidesSeen(part.id);
-          }}
-          onSkip={() => {
-            markTeachingSlidesSeen(part.id);
-          }}
-        />
-      </View>
-    );
-  }
 
   if (!currentQuestion) {
     return (
@@ -899,21 +896,18 @@ export default function LessonScreen() {
           <View style={styles.optionsContainer}>
             {currentQuestion.type === 'matching' && currentQuestion.matchPairs && currentQuestion.shuffledGenerics ? (
               <MatchingQuestion
-                key={currentQuestion.id}
                 pairs={currentQuestion.matchPairs}
                 shuffledGenerics={currentQuestion.shuffledGenerics}
                 onComplete={handleMatchingComplete}
               />
             ) : currentQuestion.type === 'cloze' && currentQuestion.cloze ? (
               <ClozeQuestion
-                key={currentQuestion.id}
                 cloze={currentQuestion.cloze}
                 onComplete={handleStructuredAnswer}
                 disabled={showFact}
               />
             ) : currentQuestion.type === 'multi_select' && currentQuestion.correctAnswers ? (
               <MultiSelectQuestion
-                key={currentQuestion.id}
                 options={currentQuestion.options}
                 correctAnswers={currentQuestion.correctAnswers}
                 onComplete={handleStructuredAnswer}
@@ -938,6 +932,7 @@ export default function LessonScreen() {
         visible={showOutOfHearts}
         onClose={() => setShowOutOfHearts(false)}
         onGoToShop={() => {
+          allowExitRef.current = true;
           router.back();
           setTimeout(() => router.push('/(tabs)/shop'), 100);
         }}
@@ -1031,22 +1026,6 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  teachingPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: Colors.primaryLight,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
-  },
-  teachingPillText: {
-    color: Colors.primary,
-    fontSize: 13,
-    fontWeight: '900' as const,
-    letterSpacing: 0.3,
   },
   heartBadge: {
     flexDirection: 'row',
