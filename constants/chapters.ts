@@ -9,12 +9,11 @@ export const chapters: Chapter[] = [
     icon: 'Heart',
     color: Colors.chapterColors[0],
     parts: [
-      { id: 'm1-p1', title: 'Big Picture: BP, HF & Neurohormonal Systems', description: 'Overview of HTN, HF pathophysiology', drugIds: ['m1-1', 'm1-10', 'm1-14', 'm1-21'], questionCount: 8 },
       { id: 'm1-p2', title: 'ACE Inhibitors & ARBs', description: 'Lisinopril, Enalapril, Losartan, Valsartan, Irbesartan', drugIds: ['m1-1', 'm1-2', 'm1-3', 'm1-4', 'm1-5', 'm1-6', 'm1-7'], questionCount: 10 },
       { id: 'm1-p3', title: 'Thiazide & Loop Diuretics', description: 'HCTZ, Chlorthalidone, Furosemide, Bumetanide, Torsemide', drugIds: ['m1-8', 'm1-9', 'm1-10', 'm1-11', 'm1-12', 'm1-13'], questionCount: 10 },
       { id: 'm1-p4', title: 'Beta-Blockers (HTN, HF, CAD)', description: 'Metoprolol, Carvedilol, Atenolol, Propranolol, Bisoprolol', drugIds: ['m1-14', 'm1-15', 'm1-16', 'm1-17', 'm1-18', 'm1-19', 'm1-20'], questionCount: 10 },
       { id: 'm1-p5', title: 'MRAs & ARNI', description: 'Spironolactone, Eplerenone, Sacubitril/Valsartan', drugIds: ['m1-21', 'm1-22', 'm1-23'], questionCount: 8 },
-      { id: 'm1-p6', title: 'Putting It Together: Regimens & Case Review', description: 'Hydralazine, Clonidine & HTN/HF regimens', drugIds: ['m1-24', 'm1-25', 'm1-1', 'm1-10', 'm1-15', 'm1-23'], questionCount: 10 },
+      { id: 'm1-p6', title: 'Calcium Channel Blockers', description: 'Amlodipine, Diltiazem (high-yield CCBs)', drugIds: ['m2-24', 'm2-25'], questionCount: 8 },
     ],
   },
   {

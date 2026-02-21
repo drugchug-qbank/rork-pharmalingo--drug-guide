@@ -29,6 +29,11 @@ export default function ChapterDetailScreen() {
 
   const chapterProgress = getChapterProgress(chapter.id);
 
+  const masteryLessonId = `mastery-${chapter.id}`;
+  const masteryScore = getLessonScore(masteryLessonId);
+  const allPartsCompleted = chapter.parts.every((p) => getLessonScore(p.id) >= 70);
+  const masteryUnlocked = allPartsCompleted;
+
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -77,7 +82,7 @@ export default function ChapterDetailScreen() {
               key={part.id}
               title={part.title}
               description={part.description}
-              questionCount={part.questionCount}
+              questionCount={Math.min(14, Math.max(10, part.questionCount + 4))}
               score={score}
               unlocked={unlocked}
               completed={completed}
@@ -99,6 +104,40 @@ export default function ChapterDetailScreen() {
             />
           );
         })}
+
+        <Pressable
+          style={[styles.masteryCard, !masteryUnlocked && styles.masteryCardLocked]}
+          onPress={() => {
+            if (!masteryUnlocked) return;
+            if (progress.stats.hearts <= 0) {
+              setShowOutOfHearts(true);
+              return;
+            }
+            router.push({
+              pathname: '/lesson',
+              params: { chapterId: chapter.id, mode: 'mastery' },
+            });
+          }}
+        >
+          <View style={styles.masteryRow}>
+            <View style={styles.masteryIcon}>
+              <Trophy size={20} color={Colors.primary} />
+            </View>
+            <View style={styles.masteryText}>
+              <Text style={styles.masteryTitle}>Mastering Quiz</Text>
+              <Text style={styles.masterySubtitle}>30 questions • all sections</Text>
+            </View>
+            {masteryScore > 0 ? (
+              <View style={styles.masteryScorePill}>
+                <Text style={styles.masteryScoreText}>{masteryScore}%</Text>
+              </View>
+            ) : null}
+            {!masteryUnlocked ? <Lock size={18} color={Colors.textSecondary} /> : null}
+          </View>
+          <Text style={styles.masteryDescription}>
+            Cumulative check for this module. Unlocks after you complete all sections (≥70%).
+          </Text>
+        </Pressable>
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -367,5 +406,66 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textTertiary,
     fontWeight: '600' as const,
+  },
+  masteryCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    gap: 8,
+  },
+  masteryCardLocked: {
+    opacity: 0.55,
+  },
+  masteryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  masteryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: Colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  masteryText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  masteryTitle: {
+    fontSize: 15,
+    fontWeight: '800' as const,
+    color: Colors.text,
+  },
+  masterySubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '600' as const,
+  },
+  masteryDescription: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '500' as const,
+    lineHeight: 18,
+  },
+  masteryScorePill: {
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 10,
+  },
+  masteryScoreText: {
+    fontSize: 12,
+    fontWeight: '900' as const,
+    color: Colors.text,
   },
 });

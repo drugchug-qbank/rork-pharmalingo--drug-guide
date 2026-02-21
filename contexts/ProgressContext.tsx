@@ -6,6 +6,7 @@ import {
   UserProgress,
   UserStats,
   DrugMastery,
+  ConceptMastery,
   MistakeBankEntry,
   LeagueTier,
   LeagueWeekResult,
@@ -169,6 +170,7 @@ function migrateFromV1(stored: string): UserProgress | null {
       completedLessons: old.completedLessons ?? {},
       chapterProgress: old.chapterProgress ?? {},
       drugMastery: {},
+      conceptMastery: {},
       mistakeBank: [],
       level: old.level ?? 1,
     };
@@ -260,9 +262,23 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
 
       if (stored) {
         try {
-          const parsed = JSON.parse(stored) as UserProgress;
-          console.log(`[ProgressContext] Loaded existing data for user ${userId}, xp: ${parsed.stats?.xpTotal ?? 0}`);
-          return parsed;
+          const parsed = JSON.parse(stored) as Partial<UserProgress>;
+          const merged: UserProgress = {
+            ...DEFAULT_PROGRESS,
+            ...parsed,
+            stats: {
+              ...DEFAULT_STATS,
+              ...(parsed.stats ?? {}),
+            },
+            completedLessons: parsed.completedLessons ?? {},
+            chapterProgress: parsed.chapterProgress ?? {},
+            drugMastery: parsed.drugMastery ?? {},
+            conceptMastery: (parsed as any).conceptMastery ?? {},
+            mistakeBank: parsed.mistakeBank ?? [],
+            level: parsed.level ?? DEFAULT_PROGRESS.level,
+          };
+          console.log(`[ProgressContext] Loaded existing data for user ${userId}, xp: ${merged.stats?.xpTotal ?? 0}`);
+          return merged;
         } catch (e) {
           console.log('[ProgressContext] Failed to parse stored data, returning defaults');
           await AsyncStorage.removeItem(key);
@@ -357,6 +373,9 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
         leagueTier: data.stats.leagueTier || 'Bronze',
         ...weekResetStats,
       },
+      drugMastery: data.drugMastery ?? {},
+      conceptMastery: (data as any).conceptMastery ?? {},
+      mistakeBank: data.mistakeBank ?? [],
     };
 
     setProgress(safeguarded);
@@ -806,6 +825,74 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
     [updateProgress, getNextReviewDate]
   );
 
+  /**
+   * Concept mastery is used for "intro" teaching prompts.
+   * - Any correct answer marks the concept as mastered.
+   * - If a student misses a mastered concept 3 times, we unmaster it so the intro can re-appear.
+   */
+  const updateConceptMastery = useCallback(
+    (conceptId: string, correct: boolean) => {
+      const nowISO = new Date().toISOString();
+      if (!conceptId) return;
+      updateProgress((prev) => {
+        const existing: ConceptMastery = prev.conceptMastery?.[conceptId] ?? {
+          mastered: false,
+          correctStreak: 0,
+          wrongSinceMastered: 0,
+          lastSeenISO: '',
+        };
+
+        if (correct) {
+          return {
+            ...prev,
+            conceptMastery: {
+              ...(prev.conceptMastery ?? {}),
+              [conceptId]: {
+                mastered: true,
+                correctStreak: existing.correctStreak + 1,
+                wrongSinceMastered: 0,
+                lastSeenISO: nowISO,
+              },
+            },
+          };
+        }
+
+        const nextWrong = existing.mastered ? existing.wrongSinceMastered + 1 : existing.wrongSinceMastered;
+        const shouldUnmaster = existing.mastered && nextWrong >= 3;
+
+        return {
+          ...prev,
+          conceptMastery: {
+            ...(prev.conceptMastery ?? {}),
+            [conceptId]: {
+              mastered: shouldUnmaster ? false : existing.mastered,
+              correctStreak: 0,
+              wrongSinceMastered: nextWrong,
+              lastSeenISO: nowISO,
+            },
+          },
+        };
+      });
+    },
+    [updateProgress]
+  );
+
+  const isConceptMastered = useCallback(
+    (conceptId: string): boolean => {
+      if (!conceptId) return false;
+      return progress.conceptMastery?.[conceptId]?.mastered ?? false;
+    },
+    [progress.conceptMastery]
+  );
+
+  /**
+   * A simple "what can we review?" helper: if a drug has any mastery entry, the student has seen it.
+   */
+  const getUnlockedDrugIds = useCallback((): string[] => {
+    const mastery = progress.drugMastery ?? {};
+    return Object.keys(mastery);
+  }, [progress.drugMastery]);
+
   const getDueForReviewCount = useCallback((): number => {
     const mastery = progress.drugMastery ?? {};
     const now = new Date().toISOString();
@@ -1254,9 +1341,12 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
     selectSchool,
 
     updateDrugMastery,
+    updateConceptMastery,
+    isConceptMastered,
     getDueForReviewCount,
     getDueForReviewDrugIds,
     getLowMasteryDrugIds,
+    getUnlockedDrugIds,
 
     addMistakes,
     removeMistakesByDrug,
