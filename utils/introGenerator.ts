@@ -1,5 +1,6 @@
 import { QuizQuestion } from '@/constants/types';
 import { Drug, drugs, getDrugsByIds } from '@/constants/drugData';
+import { chapters } from '@/constants/chapters';
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -26,12 +27,17 @@ function normalize(text: string): string {
     .trim();
 }
 
-function slug(text: string): string {
-  return normalize(text).replace(/\s+/g, '-');
+function getPartTitle(partId: string): string {
+  for (const ch of chapters) {
+    const part = ch.parts.find((p) => p.id === partId);
+    if (part) return part.title;
+  }
+  return 'this lesson';
 }
 
 function genericSuffix(genericName: string): string {
   const g = normalize(genericName);
+
   const suffixes = [
     'asteride',
     'triptan',
@@ -64,6 +70,7 @@ function genericSuffix(genericName: string): string {
     'tide',
     'vir',
   ];
+
   for (const suf of suffixes) {
     if (g.endsWith(suf)) return suf;
   }
@@ -104,21 +111,14 @@ const SUFFIX_TO_CLASS: Record<string, string> = {
 };
 
 const LOW_YIELD_SIDE_EFFECTS = new Set(
-  [
-    'nausea',
-    'headache',
-    'dizziness',
-    'diarrhea',
-    'constipation',
-    'fatigue',
-    'insomnia',
-    'dry mouth',
-    'rash',
-  ].map((s) => s.toLowerCase())
+  ['nausea', 'headache', 'dizziness', 'diarrhea', 'constipation', 'fatigue', 'insomnia', 'dry mouth', 'rash'].map(
+    (s) => s.toLowerCase()
+  )
 );
 
 function buildSuffixIntroQuestions(partId: string, pool: Drug[]): QuizQuestion[] {
   const suffixCounts = new Map<string, number>();
+
   for (const d of pool) {
     const suf = genericSuffix(d.genericName);
     if (!suf) continue;
@@ -132,6 +132,7 @@ function buildSuffixIntroQuestions(partId: string, pool: Drug[]): QuizQuestion[]
   return top.map(([suf]) => {
     const classLabel = SUFFIX_TO_CLASS[suf];
     const correct = `-${suf}`;
+
     const allSuffixTokens = Object.keys(SUFFIX_TO_CLASS).map((k) => `-${k}`);
     const distractors = shuffleArray(allSuffixTokens.filter((x) => x !== correct)).slice(0, 3);
     const wordBank = shuffleArray([correct, ...distractors]);
@@ -156,12 +157,15 @@ function buildSuffixIntroQuestions(partId: string, pool: Drug[]): QuizQuestion[]
 }
 
 function buildCommonIndicationsQuestion(partId: string, pool: Drug[]): QuizQuestion | null {
+  const partTitle = getPartTitle(partId);
+
   const counts = new Map<string, number>();
   for (const d of pool) {
     for (const ind of d.indications ?? []) {
       counts.set(ind, (counts.get(ind) ?? 0) + 1);
     }
   }
+
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
   const top = ranked.map(([i]) => i).slice(0, 2);
   if (top.length === 0) return null;
@@ -183,11 +187,11 @@ function buildCommonIndicationsQuestion(partId: string, pool: Drug[]): QuizQuest
       options,
       drugId: pool[0]?.id,
       cloze: {
-        parts: ['Key use: ', '.'],
+        parts: [`Key indication in ${partTitle}: `, '.'],
         wordBank: options,
         correctWords: [correct],
       },
-      explanation: `Common use(s) in this section: ${correct}.`,
+      explanation: `High-yield indication in ${partTitle}: ${correct}.`,
     };
   }
 
@@ -196,15 +200,17 @@ function buildCommonIndicationsQuestion(partId: string, pool: Drug[]): QuizQuest
     conceptId: `${partId}-uses`,
     phase: 'intro',
     type: 'multi_select',
-    question: 'Select ALL common uses for this section:',
+    question: `Select ALL common indications covered in ${partTitle}:`,
     correctAnswers: top,
     options,
     drugId: pool[0]?.id,
-    explanation: `High-yield uses: ${top.join(' • ')}.`,
+    explanation: `High-yield indications in ${partTitle}: ${top.join(' • ')}.`,
   };
 }
 
 function buildCommonSideEffectsQuestion(partId: string, pool: Drug[]): QuizQuestion | null {
+  const partTitle = getPartTitle(partId);
+
   const counts = new Map<string, number>();
   for (const d of pool) {
     for (const se of d.sideEffects ?? []) {
@@ -213,9 +219,11 @@ function buildCommonSideEffectsQuestion(partId: string, pool: Drug[]): QuizQuest
   }
 
   const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+
   // Prefer non-generic side effects if possible
   const nonGeneric = ranked.filter(([se]) => !LOW_YIELD_SIDE_EFFECTS.has(se.toLowerCase()));
   const pickFrom = nonGeneric.length >= 2 ? nonGeneric : ranked;
+
   const top = pickFrom.map(([s]) => s).slice(0, 2);
   if (top.length === 0) return null;
 
@@ -235,11 +243,11 @@ function buildCommonSideEffectsQuestion(partId: string, pool: Drug[]): QuizQuest
       options,
       drugId: pool[0]?.id,
       cloze: {
-        parts: ['High-yield side effect: ', '.'],
+        parts: [`High-yield side effect in ${partTitle}: `, '.'],
         wordBank: options,
         correctWords: [correct],
       },
-      explanation: `Common/high-yield AEs: ${correct}.`,
+      explanation: `High-yield AE in ${partTitle}: ${correct}.`,
     };
   }
 
@@ -248,11 +256,11 @@ function buildCommonSideEffectsQuestion(partId: string, pool: Drug[]): QuizQuest
     conceptId: `${partId}-aes`,
     phase: 'intro',
     type: 'multi_select',
-    question: 'Select ALL high-yield side effects for this section:',
+    question: `Select ALL high-yield side effects covered in ${partTitle}:`,
     correctAnswers: top,
     options,
     drugId: pool[0]?.id,
-    explanation: `High-yield AEs: ${top.join(' • ')}.`,
+    explanation: `High-yield AEs in ${partTitle}: ${top.join(' • ')}.`,
   };
 }
 
@@ -301,13 +309,7 @@ export function getIntroQuestionsForPart(partId: string, drugIds: string[] = [])
         type: 'multi_select',
         question: 'Select ALL common indications for ACEs/ARBs:',
         correctAnswers: ['Hypertension', 'Heart failure'],
-        options: shuffleArray([
-          'Hypertension',
-          'Heart failure',
-          'Hyperlipidemia',
-          'Asthma',
-          'Acid reflux',
-        ]),
+        options: shuffleArray(['Hypertension', 'Heart failure', 'Hyperlipidemia', 'Asthma', 'Acid reflux']),
         drugId: drugIds[0],
         explanation: 'ACEs/ARBs: HTN, HFrEF, post‑MI, kidney protection in diabetes/CKD.',
       },
@@ -318,13 +320,7 @@ export function getIntroQuestionsForPart(partId: string, drugIds: string[] = [])
         type: 'multi_select',
         question: 'Select ALL high-yield ACE inhibitor adverse effects:',
         correctAnswers: ['Dry cough', 'Hyperkalemia'],
-        options: shuffleArray([
-          'Dry cough',
-          'Hyperkalemia',
-          'Hypoglycemia',
-          'Hair loss',
-          'Photosensitivity',
-        ]),
+        options: shuffleArray(['Dry cough', 'Hyperkalemia', 'Hypoglycemia', 'Hair loss', 'Photosensitivity']),
         drugId: drugIds[0],
         explanation: 'ACE: dry cough (bradykinin), hyperK+, ↑Cr, and rare angioedema.',
       },
@@ -337,7 +333,7 @@ export function getIntroQuestionsForPart(partId: string, drugIds: string[] = [])
         correctAnswer: 'False',
         options: ['True', 'False'],
         drugId: drugIds[0],
-        explanation: 'Dry cough is classic for ACE inhibitors. ARBs usually do NOT cause it.',
+        explanation: 'Dry cough is classic for ACE inhibitors.\nARBs usually do NOT cause it.',
       },
     ];
   }
