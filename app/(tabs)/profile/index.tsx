@@ -652,7 +652,7 @@ month_end: String(r.month_end ?? ''),
             <Text style={styles.levelText}>Lv.{progress.level}</Text>
           </View>
         </View>
-        <Text style={styles.profileTitle}>{profile?.display_name ?? 'Pharmacy Student'}</Text>
+        <Text style={styles.profileTitle}>{profile?.display_name ?? profile?.username ?? 'Pharmacy Student'}</Text>
         <Text style={styles.profileSubtitle}>
           Level {progress.level} • {progress.stats.xpTotal} XP
         </Text>
