@@ -5,6 +5,27 @@ import Colors from '@/constants/colors';
 import { TeachingSlideDeck } from '@/constants/types';
 import ProgressBar from '@/components/ProgressBar';
 
+function splitFact(fact: string): { icon: string; label?: string; body: string } {
+  const trimmed = (fact ?? '').trim();
+  if (!trimmed) return { icon: '💡', body: '' };
+
+  // Allow authors to prefix an emoji icon like: "🎯 Use: HTN • HFrEF"
+  const parts = trimmed.split(' ');
+  const first = parts[0] ?? '';
+  const hasEmojiPrefix = first.length <= 4 && !/[A-Za-z0-9]/.test(first);
+  const icon = hasEmojiPrefix ? first : '💡';
+  const text = hasEmojiPrefix ? parts.slice(1).join(' ').trim() : trimmed;
+
+  const colonIdx = text.indexOf(':');
+  if (colonIdx > 0 && colonIdx < 18) {
+    const label = text.slice(0, colonIdx).trim();
+    const body = text.slice(colonIdx + 1).trim();
+    return { icon, label, body };
+  }
+
+  return { icon, body: text };
+}
+
 type Props = {
   deck: TeachingSlideDeck;
   onDone: () => void;
@@ -106,8 +127,7 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
           </View>
           <Text style={styles.deckTitle}>{deck.title}</Text>
           <Text style={styles.slideCounter}>
-            Slide {slideIndex + 1} of {deck.slides.length} • Fact {Math.min(factIndex + 1, slide.facts.length)} of{' '}
-            {slide.facts.length}
+            Slide {slideIndex + 1}/{deck.slides.length} • {Math.min(factIndex + 1, slide.facts.length)}/{slide.facts.length} facts
           </Text>
         </View>
 
@@ -128,11 +148,15 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
           <Text style={styles.slideEmoji}>{slide.emoji ?? '💡'}</Text>
           <View style={{ flex: 1 }}>
             <Text style={styles.slideTitle}>{slide.title}</Text>
-            {slide.subtitle ? <Text style={styles.slideSubtitle}>{slide.subtitle}</Text> : null}
+            {slide.subtitle ? (
+              <View style={styles.subtitlePill}>
+                <Text style={styles.subtitlePillText}>{slide.subtitle}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Key things to know</Text>
+        <Text style={styles.sectionTitle}>Key hits</Text>
 
         <ScrollView
           style={styles.factsScroll}
@@ -141,6 +165,7 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
         >
           {visibleFacts.map((fact, idx) => {
             const isNewest = idx === visibleFacts.length - 1;
+            const parsed = splitFact(fact);
             return (
               <Animated.View
                 key={`${slide.id}-fact-${idx}`}
@@ -161,8 +186,14 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
                     : null,
                 ]}
               >
-                <View style={styles.bulletDot} />
-                <Text style={styles.factText}>{fact}</Text>
+                <View style={styles.factIcon}>
+                  <Text style={styles.factIconText}>{parsed.icon}</Text>
+                </View>
+
+                <Text style={styles.factText}>
+                  {parsed.label ? <Text style={styles.factLabel}>{parsed.label}: </Text> : null}
+                  {parsed.body}
+                </Text>
               </Animated.View>
             );
           })}
@@ -247,7 +278,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.surface,
     borderRadius: 20,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: Colors.surfaceAlt,
     shadowColor: '#000',
@@ -276,6 +307,22 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     marginTop: 2,
   },
+  subtitlePill: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+  },
+  subtitlePillText: {
+    color: Colors.primaryDark,
+    fontWeight: '900' as const,
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
   sectionTitle: {
     marginTop: 8,
     fontSize: 14,
@@ -287,32 +334,44 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   factsContent: {
-    paddingVertical: 6,
-    gap: 12,
+    paddingVertical: 4,
+    gap: 10,
   },
   factRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     backgroundColor: Colors.background,
-    padding: 12,
-    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.surfaceAlt,
   },
-  bulletDot: {
-    width: 10,
-    height: 10,
+  factIcon: {
+    width: 30,
+    height: 30,
     borderRadius: 999,
-    backgroundColor: Colors.primary,
-    marginTop: 6,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  factIconText: {
+    fontSize: 16,
   },
   factText: {
     flex: 1,
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 19,
     color: Colors.text,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
+  },
+  factLabel: {
+    color: Colors.primaryDark,
+    fontWeight: '900' as const,
   },
   nextButton: {
     flexDirection: 'row',
