@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  RefreshControl,
   Pressable,
   Animated,
   ActivityIndicator,
@@ -14,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Trophy,
@@ -105,8 +107,12 @@ export default function LeaderboardScreen() {
   const { progress, leagueRank, leagueWeekResult, dismissLeagueResult } = useProgress();
   const { session, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
+  const isFocused = useIsFocused();
 
   const [activeTab, setActiveTab] = useState<Tab>('league');
+
+  // Pull-to-refresh
+  const [pullRefreshing, setPullRefreshing] = useState(false);
 
   // Friends state
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
@@ -178,6 +184,14 @@ export default function LeaderboardScreen() {
     return () => subscription.remove();
   }, [queryClient]);
 
+  // Refresh when the Leaderboard tab/screen becomes focused (user returns from Learn/Practice/etc.)
+  useEffect(() => {
+    if (!isFocused || !session) return;
+    queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+    queryClient.invalidateQueries({ queryKey: ['friends'] });
+    queryClient.invalidateQueries({ queryKey: ['profession'] });
+  }, [isFocused, session, queryClient]);
+
   // ---------------------------
   // League Query
   // ---------------------------
@@ -203,9 +217,10 @@ export default function LeaderboardScreen() {
 
       return rows;
     },
-    enabled: !!session && activeTab === 'league',
+    enabled: !!session && isFocused && activeTab === 'league',
     staleTime: 30_000,
     refetchOnMount: 'always' as const,
+    refetchInterval: isFocused && activeTab === 'league' ? 12_000 : false,
     retry: 2,
   });
 
@@ -232,9 +247,10 @@ export default function LeaderboardScreen() {
 
       return rows;
     },
-    enabled: !!session && activeTab === 'school',
+    enabled: !!session && isFocused && activeTab === 'school',
     staleTime: 30_000,
     refetchOnMount: 'always' as const,
+    refetchInterval: isFocused && activeTab === 'school' ? 20_000 : false,
     retry: 2,
   });
 
@@ -256,9 +272,10 @@ export default function LeaderboardScreen() {
         streak: safeNum(r.streak),
       })) as FriendRow[];
     },
-    enabled: !!session && activeTab === 'friends',
+    enabled: !!session && isFocused && activeTab === 'friends',
     staleTime: 15_000,
     refetchOnMount: 'always' as const,
+    refetchInterval: isFocused && activeTab === 'friends' ? 15_000 : false,
     retry: 1,
   });
 
@@ -278,11 +295,31 @@ export default function LeaderboardScreen() {
         created_at: String(r.created_at ?? ''),
       })) as FriendRequestRow[];
     },
-    enabled: !!session && activeTab === 'friends',
+    enabled: !!session && isFocused && activeTab === 'friends',
     staleTime: 10_000,
     refetchOnMount: 'always' as const,
+    refetchInterval: isFocused && activeTab === 'friends' ? 15_000 : false,
     retry: 1,
   });
+
+  const handlePullRefresh = useCallback(async () => {
+    if (!session) return;
+    setPullRefreshing(true);
+    try {
+      if (activeTab === 'league') {
+        await leagueQuery.refetch();
+      } else if (activeTab === 'school') {
+        await schoolQuery.refetch();
+      } else if (activeTab === 'friends') {
+        await Promise.all([friendsQuery.refetch(), friendRequestsQuery.refetch()]);
+      } else if (activeTab === 'profession') {
+        // Profession tab lives in a child component; invalidating this key triggers it to refresh.
+        await queryClient.invalidateQueries({ queryKey: ['profession'] });
+      }
+    } finally {
+      setPullRefreshing(false);
+    }
+  }, [session, activeTab, leagueQuery, schoolQuery, friendsQuery, friendRequestsQuery, queryClient]);
 
   const incomingRequests = useMemo(
     () => (friendRequestsQuery.data ?? []).filter((r) => r.direction === 'incoming'),
@@ -412,13 +449,20 @@ export default function LeaderboardScreen() {
       contentFade.setValue(0);
       setActiveTab(tab);
       setSelectedFriendId(null);
+
+      // Make the target tab feel “live” by forcing a fresh fetch right away.
+      if (tab === 'league') queryClient.invalidateQueries({ queryKey: ['leaderboard', 'league'] });
+      if (tab === 'school') queryClient.invalidateQueries({ queryKey: ['leaderboard', 'school'] });
+      if (tab === 'friends') queryClient.invalidateQueries({ queryKey: ['friends'] });
+      if (tab === 'profession') queryClient.invalidateQueries({ queryKey: ['profession'] });
+
       Animated.timing(contentFade, {
         toValue: 1,
         duration: 250,
         useNativeDriver: true,
       }).start();
     },
-    [contentFade]
+    [contentFade, queryClient]
   );
 
   const proximityMessage = useMemo(() => {
@@ -752,7 +796,17 @@ export default function LeaderboardScreen() {
       </LinearGradient>
 
       <Animated.View style={[styles.content, { opacity: contentFade }]}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={pullRefreshing}
+              onRefresh={handlePullRefresh}
+              tintColor={Colors.primary}
+            />
+          }
+        >
           {/* ------------------- LEAGUE TAB ------------------- */}
           {activeTab === 'league' ? (
             leagueQuery.isLoading ? (
