@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ArrowRight, BookOpen, SkipForward } from 'lucide-react-native';
+
 import Colors from '@/constants/colors';
 import { TeachingSlideDeck } from '@/constants/types';
 import ProgressBar from '@/components/ProgressBar';
@@ -13,9 +14,11 @@ function splitFact(fact: string): { icon: string; label?: string; body: string }
   const parts = trimmed.split(' ');
   const first = parts[0] ?? '';
   const hasEmojiPrefix = first.length <= 4 && !/[A-Za-z0-9]/.test(first);
+
   const icon = hasEmojiPrefix ? first : '💡';
   const text = hasEmojiPrefix ? parts.slice(1).join(' ').trim() : trimmed;
 
+  // If the fact includes a short label prefix (e.g. "Use:"), bold it.
   const colonIdx = text.indexOf(':');
   if (colonIdx > 0 && colonIdx < 18) {
     const label = text.slice(0, colonIdx).trim();
@@ -26,11 +29,17 @@ function splitFact(fact: string): { icon: string; label?: string; body: string }
   return { icon, body: text };
 }
 
+/**
+ * Highlights suffix patterns like "-PRIL", "-SARTAN", "-STATIN" inside the subtitle.
+ * It finds the first "-letters" and splits it into prefix / suffix / rest.
+ */
 function splitSuffixHighlight(text: string): { prefix: string; suffix?: string; rest?: string } {
   const trimmed = (text ?? '').trim();
   if (!trimmed) return { prefix: '' };
+
   const match = trimmed.match(/^(.*?)(-[A-Za-z]+)(.*)$/);
   if (!match) return { prefix: trimmed };
+
   return { prefix: match[1] ?? '', suffix: match[2] ?? undefined, rest: match[3] ?? '' };
 }
 
@@ -45,7 +54,11 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
   const [factIndex, setFactIndex] = useState(0);
 
   const slide = deck.slides[slideIndex];
-  const highlightParts = useMemo(() => splitSuffixHighlight(slide?.subtitle ?? ''), [slide?.subtitle]);
+
+  const highlightParts = useMemo(
+    () => splitSuffixHighlight(slide?.subtitle ?? ''),
+    [slide?.subtitle]
+  );
 
   const totalFacts = useMemo(
     () => deck.slides.reduce((sum, s) => sum + (s.facts?.length ?? 0), 0),
@@ -88,8 +101,9 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
 
   const handleNext = () => {
     const factsLen = slide?.facts?.length ?? 0;
+
+    // No facts? just advance
     if (factsLen <= 0) {
-      // No facts? just advance
       if (slideIndex < deck.slides.length - 1) {
         setSlideIndex((i) => i + 1);
         setFactIndex(0);
@@ -99,17 +113,20 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
       return;
     }
 
+    // Next fact on same slide
     if (factIndex < factsLen - 1) {
       setFactIndex((i) => i + 1);
       return;
     }
 
+    // Next slide
     if (slideIndex < deck.slides.length - 1) {
       setSlideIndex((i) => i + 1);
       setFactIndex(0);
       return;
     }
 
+    // End of deck
     onDone();
   };
 
@@ -128,21 +145,27 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <View style={styles.badge}>
             <BookOpen size={14} color={Colors.primary} />
             <Text style={styles.badgeText}>FIRST‑TIME QUICK TEACH</Text>
           </View>
+
           <Text style={styles.deckTitle}>{deck.title}</Text>
+
           <Text style={styles.slideCounter}>
-            Slide {slideIndex + 1}/{deck.slides.length} • {Math.min(factIndex + 1, slide.facts.length)}/{slide.facts.length} facts
+            Slide {slideIndex + 1}/{deck.slides.length} •{' '}
+            {Math.min(factIndex + 1, slide.facts.length)}/{slide.facts.length} facts
           </Text>
+
+          <ProgressBar percent={progressPercent} />
         </View>
 
         <Pressable
-          onPress={handleSkip}
           style={({ pressed }) => [styles.skipButton, pressed ? { opacity: 0.8 } : null]}
+          onPress={handleSkip}
           testID="skip-teaching"
         >
           <SkipForward size={16} color={Colors.textSecondary} />
@@ -150,8 +173,7 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
         </Pressable>
       </View>
 
-      <ProgressBar progress={progressPercent} height={10} color={Colors.primary} />
-
+      {/* Card */}
       <View style={styles.slideCard}>
         <View style={styles.slideHeader}>
           <View style={styles.slideEmojiBubble}>
@@ -171,9 +193,9 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
               </Text>
             </View>
           ) : null}
-        </View>
 
-        <Text style={styles.sectionTitle}>Key hits</Text>
+          <Text style={styles.sectionTitle}>Key Info</Text>
+        </View>
 
         <ScrollView
           style={styles.factsScroll}
@@ -183,9 +205,10 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
           {visibleFacts.map((fact, idx) => {
             const isNewest = idx === visibleFacts.length - 1;
             const parsed = splitFact(fact);
+
             return (
               <Animated.View
-                key={`${slide.id}-fact-${idx}`}
+                key={`${slide.id}-${idx}`}
                 style={[
                   styles.factRow,
                   isNewest
@@ -198,7 +221,10 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
                             }),
                           },
                         ],
-                        opacity: popAnim,
+                        opacity: popAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.5, 1],
+                        }),
                       }
                     : null,
                 ]}
@@ -217,16 +243,19 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
         </ScrollView>
       </View>
 
+      {/* Next */}
       <Pressable
-        onPress={handleNext}
         style={({ pressed }) => [styles.nextButton, pressed ? { opacity: 0.9 } : null]}
+        onPress={handleNext}
         testID="teaching-next"
       >
         <Text style={styles.nextText}>{nextLabel}</Text>
         <ArrowRight size={18} color="#FFFFFF" />
       </Pressable>
 
-      <Text style={styles.footerHint}>These slides show only once. You’ll still see key concepts again as quiz questions.</Text>
+      <Text style={styles.footerHint}>
+        These slides show only once. You’ll still see key concepts again as quiz questions.
+      </Text>
     </View>
   );
 }
@@ -262,18 +291,18 @@ const styles = StyleSheet.create({
   badgeText: {
     color: Colors.primary,
     fontSize: 11,
-    fontWeight: '900' as const,
+    fontWeight: '900',
     letterSpacing: 0.4,
   },
   deckTitle: {
     fontSize: 22,
-    fontWeight: '900' as const,
+    fontWeight: '900',
     color: Colors.text,
   },
   slideCounter: {
     fontSize: 13,
     color: Colors.textSecondary,
-    fontWeight: '700' as const,
+    fontWeight: '700',
   },
   skipButton: {
     flexDirection: 'row',
@@ -288,7 +317,7 @@ const styles = StyleSheet.create({
   },
   skipText: {
     color: Colors.textSecondary,
-    fontWeight: '800' as const,
+    fontWeight: '800',
     fontSize: 14,
   },
   slideCard: {
@@ -324,9 +353,9 @@ const styles = StyleSheet.create({
   },
   slideTitle: {
     fontSize: 22,
-    fontWeight: '900' as const,
+    fontWeight: '900',
     color: Colors.text,
-    textAlign: 'center' as const,
+    textAlign: 'center',
   },
   highlightBox: {
     alignSelf: 'stretch',
@@ -340,23 +369,23 @@ const styles = StyleSheet.create({
   },
   highlightText: {
     color: Colors.primaryDark,
-    fontWeight: '900' as const,
+    fontWeight: '900',
     fontSize: 18,
-    textAlign: 'center' as const,
+    textAlign: 'center',
     letterSpacing: 0.2,
   },
   highlightSuffix: {
     color: Colors.primary,
-    fontWeight: '900' as const,
+    fontWeight: '900',
     fontSize: 20,
   },
   sectionTitle: {
     marginTop: 2,
     fontSize: 16,
-    fontWeight: '900' as const,
+    fontWeight: '900',
     color: Colors.secondary,
     letterSpacing: 0.2,
-    textAlign: 'center' as const,
+    textAlign: 'center',
   },
   factsScroll: {
     flex: 1,
@@ -395,11 +424,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
     color: Colors.text,
-    fontWeight: '700' as const,
+    fontWeight: '700',
   },
   factLabel: {
     color: Colors.primaryDark,
-    fontWeight: '900' as const,
+    fontWeight: '900',
   },
   nextButton: {
     flexDirection: 'row',
@@ -413,19 +442,19 @@ const styles = StyleSheet.create({
   nextText: {
     color: '#FFFFFF',
     fontSize: 17,
-    fontWeight: '900' as const,
+    fontWeight: '900',
   },
   footerHint: {
-    textAlign: 'center' as const,
+    textAlign: 'center',
     color: Colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   errorText: {
-    textAlign: 'center' as const,
+    textAlign: 'center',
     color: Colors.textSecondary,
     fontSize: 14,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     marginTop: 40,
   },
 });
