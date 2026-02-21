@@ -50,22 +50,36 @@ function classKey(drugClass: string): string {
 
 function genericSuffix(genericName: string): string {
   const g = normalize(genericName);
-  const suffixes = [
-    'pril',
-    'sartan',
-    'olol',
+    const suffixes = [
+    'asteride',
+    'triptan',
+    'floxacin',
+    'cycline',
     'statin',
+    'sartan',
+    'pril',
+    'xaban',
+    'gatran',
+    'cillin',
     'dipine',
     'prazole',
     'tidine',
     'flozin',
     'gliptin',
-    'tide',
+    'lukast',
+    'setron',
+    'coxib',
+    'oxicam',
+    'profen',
+    'olol',
+    'osin',
+    'pam',
+    'lam',
+    'caine',
     'mab',
     'azole',
-    'cycline',
-    'floxacin',
     'mycin',
+    'tide',
     'vir',
   ];
   for (const suf of suffixes) {
@@ -73,6 +87,39 @@ function genericSuffix(genericName: string): string {
   }
   return '';
 }
+
+const SUFFIX_TO_CLASS: Record<string, string> = {
+  pril: 'ACE inhibitor',
+  sartan: 'ARB',
+  olol: 'Beta-blocker',
+  statin: 'Statin',
+  dipine: 'Calcium channel blocker',
+  prazole: 'Proton pump inhibitor',
+  tidine: 'H2 blocker',
+  flozin: 'SGLT2 inhibitor',
+  gliptin: 'DPP-4 inhibitor',
+  tide: 'Peptide (often GLP-1)',
+  mab: 'Monoclonal antibody',
+  azole: 'Azole (often antifungal)',
+  cycline: 'Tetracycline antibiotic',
+  floxacin: 'Fluoroquinolone antibiotic',
+  mycin: '“Mycin” antibiotic',
+  vir: 'Antiviral',
+  cillin: 'Penicillin antibiotic',
+  xaban: 'Factor Xa inhibitor (DOAC)',
+  gatran: 'Direct thrombin inhibitor (DOAC)',
+  triptan: 'Triptan (acute migraine)',
+  setron: '5-HT3 antagonist antiemetic',
+  lukast: 'Leukotriene receptor antagonist',
+  coxib: 'COX-2 selective NSAID',
+  oxicam: 'NSAID',
+  profen: 'NSAID',
+  osin: 'Alpha-1 blocker (BPH/HTN)',
+  asteride: '5α-reductase inhibitor',
+  pam: 'Benzodiazepine (often)',
+  lam: 'Benzodiazepine (often)',
+  caine: 'Local anesthetic (often)',
+};
 
 function getSimilarDrugs(drug: Drug, pool: Drug[] = drugs): Drug[] {
   const key = classKey(drug.drugClass);
@@ -148,6 +195,164 @@ function genericToBrand(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qui
     },
     phase
   );
+}
+
+function clozeBrandToGeneric(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
+  const similar = getSimilarDrugs(drug, pool);
+  const distractors = getDistractorsSmart(
+    drug.genericName,
+    similar.map((d) => d.genericName),
+    drugs.map((d) => d.genericName),
+    3
+  );
+
+  const wordBank = shuffleArray([drug.genericName, ...distractors]);
+
+  return withPhase(
+    {
+      id: uid('q-cloze-btg', drug.id),
+      type: 'cloze',
+      question: 'Fill in the blank',
+      correctAnswer: drug.genericName,
+      options: wordBank,
+      drugId: drug.id,
+      cloze: {
+        parts: [`The generic for ${drug.brandName} is `, '.'],
+        wordBank,
+        correctWords: [drug.genericName],
+      },
+      explanation: `${drug.brandName} is the brand name for ${drug.genericName}.`,
+    },
+    phase
+  );
+}
+
+function clozeGenericToBrand(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
+  const similar = getSimilarDrugs(drug, pool);
+  const distractors = getDistractorsSmart(
+    drug.brandName,
+    similar.map((d) => d.brandName),
+    drugs.map((d) => d.brandName),
+    3
+  );
+
+  const wordBank = shuffleArray([drug.brandName, ...distractors]);
+
+  return withPhase(
+    {
+      id: uid('q-cloze-gtb', drug.id),
+      type: 'cloze',
+      question: 'Fill in the blank',
+      correctAnswer: drug.brandName,
+      options: wordBank,
+      drugId: drug.id,
+      cloze: {
+        parts: [`The brand for ${drug.genericName} is `, '.'],
+        wordBank,
+        correctWords: [drug.brandName],
+      },
+      explanation: `${drug.genericName} is commonly known by the brand ${drug.brandName}.`,
+    },
+    phase
+  );
+}
+
+function clozeIndication(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
+  const correct = drug.indications?.[0] ?? 'Hypertension';
+  const allIndications = unique(drugs.flatMap((d) => d.indications ?? []));
+  const similar = getSimilarDrugs(drug, pool);
+  const similarIndications = unique(similar.flatMap((d) => d.indications ?? []));
+  const distractors = getDistractorsSmart(correct, similarIndications, allIndications, 3);
+  const wordBank = shuffleArray([correct, ...distractors]);
+
+  return withPhase(
+    {
+      id: uid('q-cloze-ind', drug.id),
+      type: 'cloze',
+      question: 'Fill in the blank',
+      correctAnswer: correct,
+      options: wordBank,
+      drugId: drug.id,
+      cloze: {
+        parts: [`A common use for ${drug.genericName} is `, '.'],
+        wordBank,
+        correctWords: [correct],
+      },
+      explanation: `Primary indication: ${correct}.`,
+    },
+    phase
+  );
+}
+
+function clozeSideEffect(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
+  const correct = drug.sideEffects?.[0] ?? 'Dizziness';
+  const allSE = unique(drugs.flatMap((d) => d.sideEffects ?? []));
+  const similar = getSimilarDrugs(drug, pool);
+  const similarSE = unique(similar.flatMap((d) => d.sideEffects ?? []));
+  const distractors = getDistractorsSmart(correct, similarSE, allSE, 3);
+  const wordBank = shuffleArray([correct, ...distractors]);
+
+  return withPhase(
+    {
+      id: uid('q-cloze-se', drug.id),
+      type: 'cloze',
+      question: 'Fill in the blank',
+      correctAnswer: correct,
+      options: wordBank,
+      drugId: drug.id,
+      cloze: {
+        parts: [`A common side effect of ${drug.genericName} is `, '.'],
+        wordBank,
+        correctWords: [correct],
+      },
+      explanation: `Common side effect: ${correct}.`,
+    },
+    phase
+  );
+}
+
+function clozeSuffixToClass(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
+  const suf = genericSuffix(drug.genericName);
+  const correct = suf ? SUFFIX_TO_CLASS[suf] : undefined;
+  if (!suf || !correct) {
+    // Fallback to another cloze type
+    return clozeBrandToGeneric(drug, pool, phase);
+  }
+
+  const distractors = shuffleArray(unique(Object.values(SUFFIX_TO_CLASS)).filter((x) => x !== correct)).slice(0, 3);
+  const wordBank = shuffleArray([correct, ...distractors]);
+
+  return withPhase(
+    {
+      id: uid('q-cloze-suffix', drug.id),
+      type: 'cloze',
+      question: 'Fill in the blank',
+      correctAnswer: correct,
+      options: wordBank,
+      drugId: drug.id,
+      cloze: {
+        parts: [`The suffix "-${suf}" usually points to a(n) `, '.'],
+        wordBank,
+        correctWords: [correct],
+      },
+      explanation: `High-yield naming pattern: -${suf} → ${correct}.`,
+    },
+    phase
+  );
+}
+
+function clozeQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
+  const suf = genericSuffix(drug.genericName);
+  const candidates: Array<(drug: Drug, pool: Drug[], phase: QuizQuestionPhase) => QuizQuestion> = [
+    clozeBrandToGeneric,
+    clozeGenericToBrand,
+    clozeIndication,
+    clozeSideEffect,
+  ];
+  if (suf && SUFFIX_TO_CLASS[suf]) {
+    candidates.push(clozeSuffixToClass);
+  }
+  return sampleOne(candidates)(drug, pool, phase);
 }
 
 function indicationPrimary(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
@@ -337,29 +542,9 @@ function suffixQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qui
     return drugClassQuestion(drug, pool, phase);
   }
 
-  // A few high-yield mappings (expandable later)
-  const suffixToClass: Record<string, string> = {
-    pril: 'ACE inhibitor',
-    sartan: 'ARB',
-    olol: 'Beta-blocker',
-    statin: 'Statin',
-    dipine: 'Calcium channel blocker',
-    prazole: 'Proton pump inhibitor',
-    tidine: 'H2 blocker',
-    flozin: 'SGLT2 inhibitor',
-    gliptin: 'DPP-4 inhibitor',
-    tide: 'Peptide (often GLP-1)',
-    mab: 'Monoclonal antibody',
-    azole: 'Azole (often antifungal)',
-    cycline: 'Tetracycline antibiotic',
-    floxacin: 'Fluoroquinolone antibiotic',
-    mycin: '“Mycin” antibiotic',
-    vir: 'Antiviral',
-  };
-
-  const correct = suffixToClass[suf] ?? 'Drug class pattern';
+  const correct = SUFFIX_TO_CLASS[suf] ?? 'Drug class pattern';
   const distractors = shuffleArray(
-    unique(Object.values(suffixToClass)).filter((x) => x !== correct)
+    unique(Object.values(SUFFIX_TO_CLASS)).filter((x) => x !== correct)
   ).slice(0, 3);
 
   return withPhase(
@@ -518,24 +703,25 @@ function generateMatchingQuestion(drugPool: Drug[], phase: QuizQuestionPhase): Q
 const GENERATORS: Array<(drug: Drug, pool: Drug[], phase: QuizQuestionPhase) => QuizQuestion> = [
   brandToGeneric,
   genericToBrand,
+  clozeQuestion,
   indicationPrimary,
   notIndication,
   sideEffectCommon,
   notSideEffect,
-  drugClassQuestion,
-  dosingQuestion,
-  keyFactToDrug,
-  classComparison,
-  suffixQuestion,
-  clinicalPearl,
-  trueFalse,
   multiSelectIndications,
   multiSelectSideEffects,
+  suffixQuestion,
+  dosingQuestion,
+  drugClassQuestion,
+  clinicalPearl,
+  trueFalse,
+  keyFactToDrug,
+  classComparison,
 ];
 
 function generateQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase, i: number): QuizQuestion {
   // Bias towards variety: mostly cycle through generators, but occasionally random.
-  const useRandom = Math.random() < 0.25;
+  const useRandom = Math.random() < 0.3;
   const gen = useRandom ? sampleOne(GENERATORS) : GENERATORS[i % GENERATORS.length];
   return gen(drug, pool, phase);
 }
@@ -608,16 +794,17 @@ export function generateMistakeQuestions(mistakes: MistakeBankEntry[], maxCount:
     not_indication: notIndication,
     side_effect: sideEffectCommon,
     not_side_effect: notSideEffect,
-    drug_class: drugClassQuestion,
     dosing: dosingQuestion,
+    drug_class: drugClassQuestion,
     key_fact: keyFactToDrug,
     class_comparison: classComparison,
     suffix: suffixQuestion,
     clinical_pearl: clinicalPearl,
     true_false: trueFalse,
-    multi_select: multiSelectIndications,
-    cloze: suffixQuestion,
+    multi_select: (drug, pool, phase) =>
+      (Math.random() < 0.5 ? multiSelectIndications : multiSelectSideEffects)(drug, pool, phase),
     matching: brandToGeneric,
+    cloze: clozeQuestion,
   };
 
   for (const entry of capped) {

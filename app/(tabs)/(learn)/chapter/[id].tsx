@@ -82,7 +82,7 @@ export default function ChapterDetailScreen() {
               key={part.id}
               title={part.title}
               description={part.description}
-              questionCount={Math.min(14, Math.max(10, part.questionCount + 4))}
+              questionCount={Math.min(16, Math.max(14, part.questionCount + 4))}
               score={score}
               unlocked={unlocked}
               completed={completed}
