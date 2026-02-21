@@ -171,6 +171,7 @@ function migrateFromV1(stored: string): UserProgress | null {
       chapterProgress: old.chapterProgress ?? {},
       drugMastery: {},
       conceptMastery: {},
+      teachingSlidesSeen: {},
       mistakeBank: [],
       level: old.level ?? 1,
     };
@@ -274,6 +275,7 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
             chapterProgress: parsed.chapterProgress ?? {},
             drugMastery: parsed.drugMastery ?? {},
             conceptMastery: (parsed as any).conceptMastery ?? {},
+            teachingSlidesSeen: (parsed as any).teachingSlidesSeen ?? {},
             mistakeBank: parsed.mistakeBank ?? [],
             level: parsed.level ?? DEFAULT_PROGRESS.level,
           };
@@ -375,6 +377,7 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
       },
       drugMastery: data.drugMastery ?? {},
       conceptMastery: (data as any).conceptMastery ?? {},
+      teachingSlidesSeen: (data as any).teachingSlidesSeen ?? {},
       mistakeBank: data.mistakeBank ?? [],
     };
 
@@ -886,6 +889,39 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
   );
 
   /**
+   * Pre-quiz teaching slides are shown ONLY once per subsection (part).
+   * This is separate from concept mastery (which can re-appear if missed repeatedly).
+   */
+  const hasSeenTeachingSlides = useCallback(
+    (partId: string): boolean => {
+      if (!partId) return false;
+      // Backwards-compatible fallback:
+      // if they already completed the lesson before this feature existed,
+      // treat slides as "seen".
+      if (progress.completedLessons?.[partId] !== undefined) return true;
+      return progress.teachingSlidesSeen?.[partId] ?? false;
+    },
+    [progress.teachingSlidesSeen, progress.completedLessons]
+  );
+
+  const markTeachingSlidesSeen = useCallback(
+    (partId: string) => {
+      if (!partId) return;
+      updateProgress((prev) => {
+        if (prev.teachingSlidesSeen?.[partId]) return prev;
+        return {
+          ...prev,
+          teachingSlidesSeen: {
+            ...(prev.teachingSlidesSeen ?? {}),
+            [partId]: true,
+          },
+        };
+      });
+    },
+    [updateProgress]
+  );
+
+  /**
    * A simple "what can we review?" helper: if a drug has any mastery entry, the student has seen it.
    */
   const getUnlockedDrugIds = useCallback((): string[] => {
@@ -1343,6 +1379,8 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
     updateDrugMastery,
     updateConceptMastery,
     isConceptMastered,
+    hasSeenTeachingSlides,
+    markTeachingSlidesSeen,
     getDueForReviewCount,
     getDueForReviewDrugIds,
     getLowMasteryDrugIds,

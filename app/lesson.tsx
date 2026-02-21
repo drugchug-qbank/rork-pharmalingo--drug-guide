@@ -27,6 +27,8 @@ import ProgressBar from '@/components/ProgressBar';
 import MascotAnimated, { MascotMood } from '@/components/MascotAnimated';
 import OutOfHeartsModal from '@/components/OutOfHeartsModal';
 import { getIntroQuestionsForPart } from '@/utils/introGenerator';
+import TeachingSlides from '@/components/TeachingSlides';
+import { getTeachingDeckForPart } from '@/utils/teachingSlides';
 
 type OptionState = 'default' | 'correct' | 'incorrect' | 'disabled';
 
@@ -77,6 +79,8 @@ export default function LessonScreen() {
     updateDrugMastery,
     updateConceptMastery,
     isConceptMastered,
+    hasSeenTeachingSlides,
+    markTeachingSlidesSeen,
     getUnlockedDrugIds,
     getDueForReviewDrugIds,
     getLowMasteryDrugIds,
@@ -92,6 +96,15 @@ export default function LessonScreen() {
 
   const chapter = chapterId ? getChapterById(chapterId) : undefined;
   const part = chapter?.parts.find(p => p.id === partId);
+
+  // Pre-quiz teaching deck (shown only once per subsection on first attempt)
+  const teachingDeck = part ? getTeachingDeckForPart(part.id) : null;
+  const shouldShowTeachingDeck =
+    !!part &&
+    !!teachingDeck &&
+    !isPractice &&
+    mode !== 'mastery' &&
+    !hasSeenTeachingSlides(part.id);
 
   const mistakesParam = useLocalSearchParams<{ mistakesJson?: string }>().mistakesJson;
   const mistakesDrugIdsParam = useLocalSearchParams<{ mistakeDrugIds?: string }>().mistakeDrugIds;
@@ -703,6 +716,43 @@ export default function LessonScreen() {
     router.back();
   }, [router]);
 
+  // --- First-time teaching slides (shown before the quiz starts) ---
+  if (shouldShowTeachingDeck && teachingDeck && part) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+        <Stack.Screen options={{ headerShown: false }} />
+
+        <View style={styles.topBar}>
+          <Pressable onPress={handleClose} style={styles.closeButton} testID="close-lesson">
+            <X size={22} color={Colors.textSecondary} />
+          </Pressable>
+
+          <View style={styles.progressContainer}>
+            <View style={styles.teachingPill}>
+              <Text style={styles.teachingPillText}>Quick Teach</Text>
+            </View>
+          </View>
+
+          <View style={styles.heartBadge}>
+            <Heart size={16} color={Colors.accent} fill={Colors.accent} />
+            <Text style={styles.heartText}>{progress.stats.hearts}</Text>
+          </View>
+        </View>
+
+        <TeachingSlides
+          deck={teachingDeck}
+          onDone={() => {
+            // Mark as seen so it won't show again on re-takes.
+            markTeachingSlidesSeen(part.id);
+          }}
+          onSkip={() => {
+            markTeachingSlidesSeen(part.id);
+          }}
+        />
+      </View>
+    );
+  }
+
   if (!currentQuestion) {
     return (
       <View style={styles.container}>
@@ -981,6 +1031,22 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  teachingPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: Colors.primaryLight,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+  },
+  teachingPillText: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: '900' as const,
+    letterSpacing: 0.3,
   },
   heartBadge: {
     flexDirection: 'row',

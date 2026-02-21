@@ -59,6 +59,29 @@ export interface ClozeSpec {
   correctWords: string[];
 }
 
+/**
+ * Pre-quiz "teaching slides" shown only on the first attempt for a subsection.
+ * Designed to be short, high-yield, and tappable (facts reveal one-by-one).
+ */
+export interface TeachingSlide {
+  /** Stable id within a deck (e.g., "ace", "arb") */
+  id: string;
+  /** Title shown at the top of the slide */
+  title: string;
+  /** Optional subheading (e.g., suffix hint) */
+  subtitle?: string;
+  /** Optional emoji shown beside the title */
+  emoji?: string;
+  /** Facts revealed one at a time as the user taps Next */
+  facts: string[];
+}
+
+export interface TeachingSlideDeck {
+  /** Deck title (usually matches the subsection title) */
+  title: string;
+  slides: TeachingSlide[];
+}
+
 export interface QuizQuestion {
   id: string;
   type: QuizQuestionType;
@@ -188,6 +211,8 @@ export interface UserProgress {
   chapterProgress: Record<string, number>;
   drugMastery: Record<string, DrugMastery>;
   conceptMastery: Record<string, ConceptMastery>;
+  /** Tracks whether the user has seen the pre-quiz teaching deck for a subsection (partId). */
+  teachingSlidesSeen: Record<string, boolean>;
   mistakeBank: MistakeBankEntry[];
   level: number;
 }
@@ -232,6 +257,7 @@ export const DEFAULT_PROGRESS: UserProgress = {
   chapterProgress: {},
   drugMastery: {},
   conceptMastery: {},
+  teachingSlidesSeen: {},
   mistakeBank: [],
   level: 1,
 };
