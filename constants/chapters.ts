@@ -143,6 +143,22 @@ export const chapters: Chapter[] = [
       { id: 'm10-p5', title: 'Eye/Ear & Misc Top 300 Drugs', description: 'Latanoprost, Timolol, Ciprodex, Sevelamer, Epoetin Alfa', drugIds: ['m10-20', 'm10-21', 'm10-22', 'm10-23', 'm10-24', 'm10-25'], questionCount: 12 },
     ],
   },
+  {
+    id: 'mod-11',
+    title: 'Master End Game',
+    subtitle: 'Final Gold Challenge • 2× XP & Coins',
+    icon: 'Trophy',
+    color: Colors.gold,
+    parts: [
+      {
+        id: 'endgame',
+        title: 'Gold Challenge',
+        description: '15 questions • mixed review + bonus Q‑bank • 2× XP & 2× Coins',
+        drugIds: [],
+        questionCount: 15,
+      },
+    ],
+  },
 ];
 
 export function getChapterById(id: string): Chapter | undefined {

@@ -45,7 +45,9 @@ export type QuizQuestionType =
   | 'true_false'
   | 'matching'
   | 'cloze'
-  | 'multi_select';
+  | 'multi_select'
+  /** Multiple-choice item sourced from an external question bank (End Game). */
+  | 'external_mcq';
 
 export interface ClozeSpec {
   /**

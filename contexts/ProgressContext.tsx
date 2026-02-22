@@ -1113,6 +1113,19 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
 
   const isLessonUnlocked = useCallback(
     (chapterId: string, partIndex: number): boolean => {
+      // ✅ Special case: End Game (Module 11) unlocks ONLY after the entire course is mastered.
+      // Definition: all lessons (parts) AND all module Mastering quizzes are passed (≥70%).
+      if (chapterId === 'mod-11') {
+        const coreChapters = chapters.filter((c) => c.id !== 'mod-11');
+        const allPartsPassed = coreChapters.every((c) =>
+          c.parts.every((p) => (progress.completedLessons[p.id] ?? 0) >= 70)
+        );
+        const allMasteryPassed = coreChapters.every(
+          (c) => (progress.completedLessons[`mastery-${c.id}`] ?? 0) >= 70
+        );
+        return allPartsPassed && allMasteryPassed;
+      }
+
       if (partIndex === 0) {
         const chapterIndex = chapters.findIndex((c) => c.id === chapterId);
         if (chapterIndex === 0) return true;
