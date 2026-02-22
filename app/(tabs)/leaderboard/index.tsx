@@ -88,6 +88,22 @@ interface FriendRequestRow {
   created_at: string;
 }
 
+
+interface SearchUserRow {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  relationship:
+    | 'none'
+    | 'already_friends'
+    | 'outgoing_pending'
+    | 'incoming_pending'
+    | 'blocked'
+    | 'declined'
+    | string;
+}
+
 const TIER_CONFIG: Record<
   LeagueTier,
   { color: string; bg: string; emoji: string; gradient: [string, string] }
@@ -103,6 +119,15 @@ function safeNum(v: any): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
+
+
+function normalizeHandle(input: string): string {
+  const raw = (input ?? '').trim();
+  if (!raw) return '';
+  const noAt = raw.startsWith('@') ? raw.slice(1) : raw;
+  return noAt.trim().toLowerCase();
+}
+
 
 export default function LeaderboardScreen() {
   const insets = useSafeAreaInsets();
@@ -122,6 +147,17 @@ export default function LeaderboardScreen() {
   const [addUsername, setAddUsername] = useState<string>('');
   const [sendingRequest, setSendingRequest] = useState<boolean>(false);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [searchSendingUsername, setSearchSendingUsername] = useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+
+  const normalizedSearchInput = useMemo(() => normalizeHandle(addUsername), [addUsername]);
+
+  // Debounce search to avoid spamming Supabase on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(normalizedSearchInput), 250);
+    return () => clearTimeout(t);
+  }, [normalizedSearchInput]);
+
 
   const contentFade = useRef(new Animated.Value(1)).current;
   const [weekCountdown, setWeekCountdown] = useState<string>('');
@@ -260,6 +296,28 @@ export default function LeaderboardScreen() {
   // ---------------------------
   // Friends Queries
   // ---------------------------
+
+  const searchUsersQuery = useQuery<SearchUserRow[]>({
+    queryKey: ['friends', 'search', debouncedSearch],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('search_users', { p_query: debouncedSearch });
+      if (error) throw error;
+
+      const rows = Array.isArray(data) ? data : [];
+      return rows.map((r: any) => ({
+        user_id: String(r.user_id),
+        username: String(r.username ?? ''),
+        display_name: r.display_name ?? null,
+        avatar_url: r.avatar_url ?? null,
+        relationship: String(r.relationship ?? 'none'),
+      })) as SearchUserRow[];
+    },
+    enabled: !!session && isFocused && activeTab === 'friends' && debouncedSearch.length >= 2,
+    staleTime: 5_000,
+    refetchOnMount: 'always' as const,
+    retry: 0,
+  });
+
   const friendsQuery = useQuery<FriendRow[]>({
     queryKey: ['friends', 'list'],
     queryFn: async () => {
@@ -365,7 +423,7 @@ export default function LeaderboardScreen() {
   // Friends Actions
   // ---------------------------
   const handleSendRequest = useCallback(async () => {
-    const username = addUsername.trim();
+    const username = normalizeHandle(addUsername);
     if (!username) {
       Alert.alert('Add Friend', 'Type a username like @Test31');
       return;
@@ -390,12 +448,45 @@ export default function LeaderboardScreen() {
       }
 
       refreshFriends();
+      queryClient.invalidateQueries({ queryKey: ['friends', 'search'] });
     } catch (e: any) {
       Alert.alert('Could not send request', e?.message ?? String(e));
     } finally {
       setSendingRequest(false);
     }
-  }, [addUsername, refreshFriends]);
+  }, [addUsername, refreshFriends, queryClient]);
+
+const handleSendRequestToUsername = useCallback(
+    async (username: string) => {
+      const handle = normalizeHandle(username);
+      if (!handle) return;
+
+      setSearchSendingUsername(handle);
+      try {
+        const { data, error } = await supabase.rpc('send_friend_request', { p_username: handle });
+        if (error) throw error;
+
+        // Quiet success UX (no alert), but refresh lists + suggestions.
+        setAddUsername('');
+        refreshFriends();
+        queryClient.invalidateQueries({ queryKey: ['friends', 'search'] });
+
+        // If it wasn't actually sent, give a minimal hint.
+        const status = (data as any)?.status;
+        if (status === 'already_friends') {
+          Alert.alert('Already friends', 'You are already friends with that user.');
+        } else if (status === 'incoming_request_exists') {
+          Alert.alert('Request waiting', 'They already sent you a request. Accept it below.');
+        }
+      } catch (e: any) {
+        Alert.alert('Could not send request', e?.message ?? String(e));
+      } finally {
+        setSearchSendingUsername(null);
+      }
+    },
+    [refreshFriends, queryClient]
+  );
+
 
   const handleRespondRequest = useCallback(
     async (requestId: string, accept: boolean) => {
@@ -585,7 +676,87 @@ export default function LeaderboardScreen() {
     );
   };
 
-    const renderFriendItem = (friend: FriendRow, index: number) => {
+    
+  const renderSearchSuggestion = (u: SearchUserRow) => {
+    const label = String(u.display_name ?? u.username ?? 'User');
+    const rel = String(u.relationship ?? 'none');
+    const isSending = searchSendingUsername === normalizeHandle(u.username);
+
+    const right = (() => {
+      if (rel === 'already_friends') {
+        return (
+          <View style={styles.suggestPillOk}>
+            <CheckCircle2 size={14} color={Colors.success} />
+            <Text style={styles.suggestPillOkText}>Friends</Text>
+          </View>
+        );
+      }
+
+      if (rel === 'outgoing_pending') {
+        return (
+          <View style={styles.suggestPillMuted}>
+            <Clock size={14} color={Colors.textSecondary} />
+            <Text style={styles.suggestPillMutedText}>Requested</Text>
+          </View>
+        );
+      }
+
+      if (rel === 'incoming_pending') {
+        return (
+          <View style={styles.suggestPillWarn}>
+            <AlertTriangle size={14} color={Colors.warning} />
+            <Text style={styles.suggestPillWarnText}>Incoming</Text>
+          </View>
+        );
+      }
+
+      if (rel === 'blocked') {
+        return (
+          <View style={styles.suggestPillMuted}>
+            <Shield size={14} color={Colors.textSecondary} />
+            <Text style={styles.suggestPillMutedText}>Blocked</Text>
+          </View>
+        );
+      }
+
+      return (
+        <Pressable
+          style={[styles.suggestAddBtn, isSending && { opacity: 0.6 }]}
+          disabled={isSending}
+          onPress={() => handleSendRequestToUsername(u.username)}
+        >
+          {isSending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <UserPlus size={16} color="#fff" />
+          )}
+        </Pressable>
+      );
+    })();
+
+    return (
+      <View key={u.user_id} style={styles.suggestRow}>
+        <Pressable
+          style={styles.suggestLeftPress}
+          onPress={() => setAddUsername(`@${u.username}`)}
+        >
+          <View style={styles.avatarCircleSmall}>
+            <Text style={styles.avatarTextSmall}>👤</Text>
+          </View>
+          <View style={styles.suggestInfo}>
+            <Text style={styles.suggestName} numberOfLines={1}>
+              {label}
+            </Text>
+            <Text style={styles.suggestHandle}>@{u.username}</Text>
+          </View>
+        </Pressable>
+
+        {right}
+      </View>
+    );
+  };
+
+const renderFriendItem = (friend: FriendRow, index: number) => {
     const isSelected = selectedFriendId === friend.friend_user_id;
     const label = friend.display_name || friend.username;
 
@@ -1012,6 +1183,36 @@ const renderLoadingState = (label = 'Loading...') => (
                       )}
                     </Pressable>
                   </View>
+
+                  {normalizedSearchInput.length > 0 ? (
+                    <View style={styles.suggestBox}>
+                      {normalizedSearchInput.length < 2 ? (
+                        <Text style={styles.suggestHintText}>Type 2+ letters to search.</Text>
+                      ) : searchUsersQuery.isLoading ? (
+                        <View style={styles.suggestLoadingRow}>
+                          <ActivityIndicator size="small" color={Colors.primary} />
+                          <Text style={styles.suggestLoadingText}>Searching…</Text>
+                        </View>
+                      ) : searchUsersQuery.isError ? (
+                        <View>
+                          <Text style={styles.suggestErrorText}>
+                            Search unavailable. If this is your first time, add the Supabase RPC{' '}
+                            <Text style={{ fontWeight: '900' as const }}>search_users</Text>.
+                          </Text>
+                          {__DEV__ ? (
+                            <Text style={styles.suggestErrorSubText}>
+                              {String((searchUsersQuery.error as any)?.message ?? searchUsersQuery.error ?? '')}
+                            </Text>
+                          ) : null}
+                        </View>
+                      ) : (searchUsersQuery.data ?? []).length === 0 ? (
+                        <Text style={styles.suggestEmptyText}>No users found.</Text>
+                      ) : (
+                        (searchUsersQuery.data ?? []).map(renderSearchSuggestion)
+                      )}
+                    </View>
+                  ) : null}
+
 
                   <Pressable style={styles.findFriendsBtn} onPress={handleFindMyFriends}>
                     <Users size={16} color="#fff" />
@@ -1462,6 +1663,90 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addFriendBtnText: { color: '#fff', fontWeight: '900' as const },
+
+  // Search suggestions
+  suggestBox: {
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  suggestLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
+  suggestLoadingText: { color: Colors.textSecondary, fontWeight: '700' as const, fontSize: 12 },
+
+  suggestErrorText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
+  suggestEmptyText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
+
+  suggestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  suggestLeftPress: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  avatarCircleSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F0F6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  avatarTextSmall: { fontSize: 16 },
+  suggestInfo: { flex: 1 },
+  suggestName: { fontSize: 13, fontWeight: '900' as const, color: Colors.text },
+  suggestHandle: { fontSize: 11, fontWeight: '700' as const, color: Colors.textTertiary, marginTop: 2 },
+
+  suggestAddBtn: {
+    backgroundColor: Colors.primary,
+    width: 38,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  suggestPillMuted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  suggestPillMutedText: { fontSize: 11, fontWeight: '900' as const, color: Colors.textSecondary },
+
+  suggestPillOk: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(34,197,94,0.12)',
+  },
+  suggestPillOkText: { fontSize: 11, fontWeight: '900' as const, color: Colors.success },
+
+  suggestPillWarn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(245,158,11,0.14)',
+  },
+  suggestPillWarnText: { fontSize: 11, fontWeight: '900' as const, color: Colors.warning },
+
 
   findFriendsBtn: {
     marginTop: 2,
