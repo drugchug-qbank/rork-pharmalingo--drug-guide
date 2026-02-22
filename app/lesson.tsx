@@ -17,6 +17,7 @@ import {
   generateMistakeQuestions,
   generateMistakeReviewQuestions,
   generateMasteringQuestions,
+  generateEndGameQuestions,
 } from '@/utils/quizGenerator';
 import { QuizQuestion, MistakeBankEntry } from '@/constants/types';
 import QuizOption from '@/components/QuizOption';
@@ -96,6 +97,10 @@ export default function LessonScreen() {
 
   const isPractice = mode === 'practice' || mode === 'spaced' || mode === 'mistakes' || mode === 'mistakes-review';
   const isSpaced = mode === 'spaced';
+  const isEndgame = mode === 'endgame';
+
+  // Special reward multiplier for the final End Game module.
+  const rewardMultiplier = isEndgame ? 2 : 1;
 
   const chapter = chapterId ? getChapterById(chapterId) : undefined;
   const part = chapter?.parts.find(p => p.id === partId);
@@ -141,10 +146,14 @@ export default function LessonScreen() {
     if (mode === 'practice') {
       return generatePracticeQuestions(10);
     }
+    if (isEndgame) {
+      return generateEndGameQuestions(15);
+    }
     if (mode === 'mastery' && chapter) {
       const chapterDrugIds = Array.from(new Set(chapter.parts.flatMap(p => p.drugIds)));
       return generateMasteringQuestions(chapterDrugIds, 30);
-    }    if (part) {
+    }
+    if (part) {
       const introAll = getIntroQuestionsForPart(part.id, part.drugIds);
       const introPending = introAll.filter((q) => {
         if (!q.conceptId) return true;
@@ -260,16 +269,18 @@ export default function LessonScreen() {
 
   const handleComboMilestone = useCallback((newCombo: number) => {
     if (newCombo === 5) {
-      addCoins(5, 'Combo 5 bonus');
-      setComboBonusCoins(prev => prev + 5);
+      const amt = 5 * rewardMultiplier;
+      addCoins(amt, `Combo 5 bonus${rewardMultiplier > 1 ? ' (2×)' : ''}`);
+      setComboBonusCoins(prev => prev + amt);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Animated.sequence([
         Animated.timing(comboScaleAnim, { toValue: 1.6, duration: 150, useNativeDriver: true }),
         Animated.spring(comboScaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
       ]).start();
     } else if (newCombo === 10) {
-      addCoins(10, 'Combo 10 bonus');
-      setComboBonusCoins(prev => prev + 10);
+      const amt = 10 * rewardMultiplier;
+      addCoins(amt, `Combo 10 bonus${rewardMultiplier > 1 ? ' (2×)' : ''}`);
+      setComboBonusCoins(prev => prev + amt);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Animated.sequence([
         Animated.timing(comboScaleAnim, { toValue: 1.8, duration: 150, useNativeDriver: true }),
@@ -284,7 +295,7 @@ export default function LessonScreen() {
     if (newCombo >= 1) {
       comboOpacityAnim.setValue(1);
     }
-  }, [addCoins, comboScaleAnim, comboOpacityAnim]);
+  }, [addCoins, comboScaleAnim, comboOpacityAnim, rewardMultiplier]);
 
 
 
@@ -653,9 +664,10 @@ export default function LessonScreen() {
   const handleNext = useCallback(() => {
     if (currentIndex + 1 >= totalQuestions) {
       const perfect = correctCount === totalQuestions;
-      const earnedXp = Math.min(99, Math.round((correctCount * 6 + (perfect ? 20 : 0))));
+      const baseXp = Math.min(99, Math.round((correctCount * 6 + (perfect ? 20 : 0))));
+      const earnedXp = baseXp * rewardMultiplier;
       const coinsEarned = Math.floor(earnedXp / 3);
-      const perfectBonusCoins = perfect ? Math.floor(50 / 3) : 0;
+      const perfectBonusCoins = perfect ? Math.floor(50 / 3) * rewardMultiplier : 0;
 
       const prevStreak = progress.stats.streakCurrent;
       const lastActive = progress.stats.lastActiveDateISO;
@@ -688,7 +700,7 @@ export default function LessonScreen() {
         completeLesson(completionLessonId, earnedXp, correctCount, totalQuestions, highestCombo);
         const xpToSync = Math.max(0, Math.round(earnedXp));
         console.log('[XpSync] sending xpToSync=', xpToSync, 'earnedXp=', earnedXp);
-        logXpEvent(xpToSync, 'lesson_complete');
+        logXpEvent(xpToSync, isEndgame ? 'endgame_complete' : 'lesson_complete');
       } else if (isPractice && earnedXp > 0) {
         trackPracticeQuest();
         const xpToSync = Math.max(0, Math.round(earnedXp));
@@ -744,6 +756,8 @@ export default function LessonScreen() {
     partId,
     chapterId,
     mode,
+    isEndgame,
+    rewardMultiplier,
     correctCount,
     completeLesson,
     resultSlide,

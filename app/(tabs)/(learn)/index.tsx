@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -121,6 +121,7 @@ export default function LearnScreen() {
           {chapters.map((chapter, index) => {
             const unlocked = isChapterUnlocked(index);
             const chapterProg = getChapterProgress(chapter.id);
+            const isEndgame = chapter.id === 'mod-11';
 
             return (
               <React.Fragment key={chapter.id}>
@@ -142,6 +143,17 @@ export default function LearnScreen() {
                   progress={chapterProg}
                   isLocked={!unlocked}
                   index={index}
+                  special={isEndgame}
+                  onLockedPress={
+                    isEndgame && !unlocked
+                      ? () =>
+                          Alert.alert(
+                            'Locked: Master the course first',
+                            'This Gold Challenge unlocks only after you complete ALL 10 modules and pass each Mastering quiz (≥70%).',
+                            [{ text: 'Got it', style: 'default' }]
+                          )
+                      : undefined
+                  }
                   onPress={() => router.push(`/chapter/${chapter.id}`)}
                 />
               </React.Fragment>

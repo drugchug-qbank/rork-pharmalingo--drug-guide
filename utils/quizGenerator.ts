@@ -1,6 +1,21 @@
 import { QuizQuestion, Drug, MatchPair, MistakeBankEntry, QuizQuestionPhase } from '@/constants/types';
 import { drugs, getDrugsByIds } from '@/constants/drugData';
 
+// End Game: external question bank (bundled copy from drugchug-qbank/Quiz)
+type ExternalBankQuestion = {
+  id: string;
+  category?: string;
+  difficulty?: number;
+  stem: string;
+  choices: string[];
+  answerIndex: number;
+  explanation?: string;
+  reference?: string;
+};
+
+// NOTE: require() avoids TypeScript JSON module config requirements.
+const ENDGAME_BANK: ExternalBankQuestion[] = require('../constants/endgameQuestionBank.json');
+
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -983,4 +998,61 @@ export function generateSpacedRepetitionQuestions(dueDrugIds: string[], lowMaste
 export function generateMasteringQuestions(drugIds: string[], count: number = 30): QuizQuestion[] {
   // Mastery quiz: only within the provided pool
   return generateQuestionsFromDrugIds(drugIds, count, 'mastery');
+}
+
+/**
+ * End Game Challenge (Module 11)
+ * - Total: 15 questions
+ * - 2–4 come from PharmaLingo drug bank (mixed review across all modules)
+ * - 11–13 come from the external Q-bank (drugchug-qbank/Quiz)
+ */
+export function generateEndGameQuestions(totalCount: number = 15): QuizQuestion[] {
+  const reviewCount = Math.min(4, Math.max(2, Math.floor(Math.random() * 3) + 2)); // 2–4
+  const externalCount = Math.max(0, totalCount - reviewCount); // 11–13 if totalCount=15
+
+  // 1) Review questions from our drug dataset (any module)
+  const allDrugIds = drugs.map((d) => d.id);
+  const reviewDrugIds = shuffleArray(allDrugIds).slice(0, Math.min(reviewCount, allDrugIds.length));
+  const reviewQuestions = generateQuestionsFromDrugIds(reviewDrugIds, reviewCount, 'review');
+
+  // 2) External bank questions
+  const bank = (ENDGAME_BANK ?? []).filter((q) => {
+    if (!q) return false;
+    if (typeof q.stem !== 'string' || q.stem.trim().length === 0) return false;
+    if (!Array.isArray(q.choices) || q.choices.length < 2) return false;
+    if (typeof q.answerIndex !== 'number') return false;
+    if (q.answerIndex < 0 || q.answerIndex >= q.choices.length) return false;
+    return true;
+  });
+
+  const pickedExternal = shuffleArray(bank).slice(0, Math.min(externalCount, bank.length));
+  const externalQuestions: QuizQuestion[] = pickedExternal.map((q) => {
+    const correct = q.choices?.[q.answerIndex] ?? q.choices?.[0] ?? '';
+    const options = shuffleArray(dedupeOptions(q.choices ?? []));
+
+    // Ensure correct answer is present even after de-dupe.
+    const finalOptions = correct && !options.some((o) => optionKey(o) === optionKey(correct))
+      ? shuffleArray([correct, ...options]).slice(0, Math.max(4, options.length + 1))
+      : options;
+
+    return {
+      id: uid('ext', q.id),
+      type: 'external_mcq',
+      question: q.stem,
+      correctAnswer: correct,
+      options: finalOptions,
+      explanation: q.explanation,
+      phase: 'mastery',
+    };
+  });
+
+  // If the external bank ever has fewer items than expected, top up with additional review questions.
+  let combined = [...externalQuestions, ...reviewQuestions];
+  if (combined.length < totalCount) {
+    const remaining = totalCount - combined.length;
+    const extraReviewIds = shuffleArray(allDrugIds).slice(0, Math.min(remaining, allDrugIds.length));
+    combined = [...combined, ...generateQuestionsFromDrugIds(extraReviewIds, remaining, 'review')];
+  }
+
+  return shuffleArray(combined).slice(0, totalCount);
 }

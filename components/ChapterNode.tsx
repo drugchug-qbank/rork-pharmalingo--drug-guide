@@ -13,6 +13,7 @@ import {
   Syringe,
   Bug,
   BookOpen,
+  Trophy,
 } from 'lucide-react-native';
 
 type IconComponent = React.ComponentType<{
@@ -30,6 +31,10 @@ type ChapterNodeProps = {
   isLocked: boolean;
   index: number;
   onPress: () => void;
+  /** If provided, locked cards are still tappable (used for End Game lock explanation). */
+  onLockedPress?: () => void;
+  /** Special styling (gold/glow) for the End Game module. */
+  special?: boolean;
 };
 
 const ICON_MAP: Record<string, IconComponent> = {
@@ -44,6 +49,7 @@ const ICON_MAP: Record<string, IconComponent> = {
   Syringe,
   Bug,
   BookOpen,
+  Trophy,
 };
 
 export default function ChapterNode({
@@ -55,6 +61,8 @@ export default function ChapterNode({
   isLocked,
   index,
   onPress,
+  onLockedPress,
+  special,
 }: ChapterNodeProps) {
   const pct = useMemo(() => {
     const n = Number(progress ?? 0);
@@ -65,8 +73,8 @@ export default function ChapterNode({
   const isCompleted = !isLocked && pct >= 100;
   const isInProgress = !isLocked && pct > 0 && pct < 100;
 
-  // Bubble shows for: locked, in-progress, completed (matches the "status bubble" feel)
-  const showStatusBubble = isLocked || isInProgress || isCompleted;
+  // Bubble shows for: locked, in-progress, completed, OR special (End Game)
+  const showStatusBubble = Boolean(special) || isLocked || isInProgress || isCompleted;
 
   const bubble = useMemo(() => {
     if (isLocked) {
@@ -75,6 +83,14 @@ export default function ChapterNode({
         bg: 'rgba(148,163,184,0.30)',
         border: 'rgba(148,163,184,0.45)',
         fg: 'rgba(15,23,42,0.70)',
+      };
+    }
+    if (special && !isCompleted && !isInProgress) {
+      return {
+        text: 'END GAME ✨',
+        bg: Colors.gold,
+        border: 'rgba(255,255,255,0.22)',
+        fg: '#FFFFFF',
       };
     }
     if (isCompleted) {
@@ -94,7 +110,7 @@ export default function ChapterNode({
       };
     }
     return null;
-  }, [isLocked, isCompleted, isInProgress, color]);
+  }, [isLocked, isCompleted, isInProgress, color, special]);
 
   // ✅ IMPORTANT: Resolve icon safely so we never render <Heart> as a web tag
   const ResolvedIcon: IconComponent | null = useMemo(() => {
@@ -122,14 +138,23 @@ export default function ChapterNode({
   }, [icon]);
 
   const iconColor = isLocked ? Colors.textTertiary : '#FFFFFF';
-  const iconBg = isLocked ? Colors.surfaceAlt : color;
+  const iconBg = isLocked ? Colors.surfaceAlt : (special ? Colors.gold : color);
 
-  const borderColor = isLocked ? Colors.surfaceAlt : color;
+  const borderColor = isLocked ? Colors.surfaceAlt : (special ? Colors.gold : color);
+
+  const canPress = !isLocked || Boolean(onLockedPress);
+  const handlePress = () => {
+    if (isLocked) {
+      onLockedPress?.();
+      return;
+    }
+    onPress();
+  };
 
   return (
     <Pressable
-      onPress={onPress}
-      disabled={isLocked}
+      onPress={handlePress}
+      disabled={!canPress}
       style={({ pressed }) => [
         styles.card,
         {
@@ -137,10 +162,13 @@ export default function ChapterNode({
           opacity: isLocked ? 0.55 : 1,
         },
         !isLocked && { borderWidth: 1.6 },
+        special && !isLocked && styles.specialGlow,
         pressed && !isLocked && { transform: [{ scale: 0.99 }] },
       ]}
       testID={`chapter-node-${index}`}
     >
+      {/* Subtle glowing ring for special End Game */}
+      {special && !isLocked ? <View pointerEvents="none" style={styles.glowRing} /> : null}
       {showStatusBubble && bubble ? (
         <View
           style={[
@@ -225,6 +253,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
+  },
+
+  specialGlow: {
+    shadowColor: Colors.gold,
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 7,
+  },
+
+  glowRing: {
+    position: 'absolute',
+    top: -3,
+    left: -3,
+    right: -3,
+    bottom: -3,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
   },
 
   statusBubble: {

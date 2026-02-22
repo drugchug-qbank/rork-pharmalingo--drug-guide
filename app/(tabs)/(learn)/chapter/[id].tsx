@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Play, Check, Lock, Star, Trophy } from 'lucide-react-native';
@@ -28,6 +28,8 @@ export default function ChapterDetailScreen() {
   }
 
   const chapterProgress = getChapterProgress(chapter.id);
+
+  const isEndgame = chapter.id === 'mod-11';
 
   const masteryLessonId = `mastery-${chapter.id}`;
   const masteryScore = getLessonScore(masteryLessonId);
@@ -76,68 +78,81 @@ export default function ChapterDetailScreen() {
           const unlocked = isLessonUnlocked(chapter.id, index);
           const completed = score >= 70;
           const perfect = score >= 100;
+          const questionCount = isEndgame ? part.questionCount : Math.min(16, Math.max(14, part.questionCount + 4));
 
           return (
             <LessonCard
               key={part.id}
               title={part.title}
               description={part.description}
-              questionCount={Math.min(16, Math.max(14, part.questionCount + 4))}
+              questionCount={questionCount}
               score={score}
               unlocked={unlocked}
               completed={completed}
               perfect={perfect}
               index={index}
               color={chapter.color}
+              onLockedPress={
+                isEndgame && !unlocked
+                  ? () =>
+                      Alert.alert(
+                        'Locked: Master the course first',
+                        'Finish all 10 modules and pass each Mastering quiz (≥70%) to unlock the End Game.',
+                        [{ text: 'Got it', style: 'default' }]
+                      )
+                  : undefined
+              }
               onPress={() => {
-                if (unlocked) {
-                  if (progress.stats.hearts <= 0) {
-                    setShowOutOfHearts(true);
-                    return;
-                  }
-                  router.push({
-                    pathname: '/lesson',
-                    params: { chapterId: chapter.id, partId: part.id },
-                  });
+                if (progress.stats.hearts <= 0) {
+                  setShowOutOfHearts(true);
+                  return;
                 }
+                router.push({
+                  pathname: '/lesson',
+                  params: isEndgame
+                    ? { chapterId: chapter.id, partId: part.id, mode: 'endgame' }
+                    : { chapterId: chapter.id, partId: part.id },
+                });
               }}
             />
           );
         })}
 
-        <Pressable
-          style={[styles.masteryCard, !masteryUnlocked && styles.masteryCardLocked]}
-          onPress={() => {
-            if (!masteryUnlocked) return;
-            if (progress.stats.hearts <= 0) {
-              setShowOutOfHearts(true);
-              return;
-            }
-            router.push({
-              pathname: '/lesson',
-              params: { chapterId: chapter.id, mode: 'mastery' },
-            });
-          }}
-        >
-          <View style={styles.masteryRow}>
-            <View style={styles.masteryIcon}>
-              <Trophy size={20} color={Colors.primary} />
-            </View>
-            <View style={styles.masteryText}>
-              <Text style={styles.masteryTitle}>Mastering Quiz</Text>
-              <Text style={styles.masterySubtitle}>30 questions • all sections</Text>
-            </View>
-            {masteryScore > 0 ? (
-              <View style={styles.masteryScorePill}>
-                <Text style={styles.masteryScoreText}>{masteryScore}%</Text>
+        {!isEndgame ? (
+          <Pressable
+            style={[styles.masteryCard, !masteryUnlocked && styles.masteryCardLocked]}
+            onPress={() => {
+              if (!masteryUnlocked) return;
+              if (progress.stats.hearts <= 0) {
+                setShowOutOfHearts(true);
+                return;
+              }
+              router.push({
+                pathname: '/lesson',
+                params: { chapterId: chapter.id, mode: 'mastery' },
+              });
+            }}
+          >
+            <View style={styles.masteryRow}>
+              <View style={styles.masteryIcon}>
+                <Trophy size={20} color={Colors.primary} />
               </View>
-            ) : null}
-            {!masteryUnlocked ? <Lock size={18} color={Colors.textSecondary} /> : null}
-          </View>
-          <Text style={styles.masteryDescription}>
-            Cumulative check for this module. Unlocks after you complete all sections (≥70%).
-          </Text>
-        </Pressable>
+              <View style={styles.masteryText}>
+                <Text style={styles.masteryTitle}>Mastering Quiz</Text>
+                <Text style={styles.masterySubtitle}>30 questions • all sections</Text>
+              </View>
+              {masteryScore > 0 ? (
+                <View style={styles.masteryScorePill}>
+                  <Text style={styles.masteryScoreText}>{masteryScore}%</Text>
+                </View>
+              ) : null}
+              {!masteryUnlocked ? <Lock size={18} color={Colors.textSecondary} /> : null}
+            </View>
+            <Text style={styles.masteryDescription}>
+              Cumulative check for this module. Unlocks after you complete all sections (≥70%).
+            </Text>
+          </Pressable>
+        ) : null}
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -163,6 +178,7 @@ interface LessonCardProps {
   index: number;
   color: string;
   onPress: () => void;
+  onLockedPress?: () => void;
 }
 
 const LessonCard = React.memo(function LessonCard({
@@ -176,17 +192,18 @@ const LessonCard = React.memo(function LessonCard({
   index,
   color,
   onPress,
+  onLockedPress,
 }: LessonCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = useCallback(() => {
-    if (!unlocked) return;
+    if (!unlocked && !onLockedPress) return;
     Animated.spring(scaleAnim, {
       toValue: 0.96,
       useNativeDriver: true,
       friction: 8,
     }).start();
-  }, [unlocked, scaleAnim]);
+  }, [unlocked, onLockedPress, scaleAnim]);
 
   const handlePressOut = useCallback(() => {
     Animated.spring(scaleAnim, {
@@ -199,7 +216,7 @@ const LessonCard = React.memo(function LessonCard({
   return (
     <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <Pressable
-        onPress={unlocked ? onPress : undefined}
+        onPress={unlocked ? onPress : onLockedPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={[styles.lessonCard, !unlocked && styles.lockedCard]}
