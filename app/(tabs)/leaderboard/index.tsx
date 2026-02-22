@@ -12,12 +12,12 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Swipeable } from 'react-native-gesture-handler';
 import {
   Trophy,
   Users,
@@ -74,7 +74,9 @@ interface FriendRow {
   avatar_url: string | null;
   weekly_xp: number;
   streak: number;
+  mutual_count?: number; // optional for backward compatibility
 }
+
 
 interface FriendRequestRow {
   request_id: string;
@@ -84,14 +86,6 @@ interface FriendRequestRow {
   display_name: string;
   avatar_url: string | null;
   created_at: string;
-}
-
-interface UserSearchRow {
-  user_id: string;
-  username: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  relationship: 'none' | 'already_friends' | 'outgoing_pending' | 'incoming_pending';
 }
 
 const TIER_CONFIG: Record<
@@ -108,18 +102,6 @@ type Tab = 'league' | 'friends' | 'school' | 'profession';
 function safeNum(v: any): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
-}
-
-function looksLikeEmail(v: string): boolean {
-  // Super lightweight heuristic; used only to prevent accidental email display in public UI.
-  return /.+@.+\..+/.test(v);
-}
-
-function safePublicName(displayName: any, username: any): string {
-  const name = String(displayName ?? '').trim();
-  if (name && !looksLikeEmail(name)) return name;
-  const user = String(username ?? '').trim();
-  return user || 'User';
 }
 
 export default function LeaderboardScreen() {
@@ -226,8 +208,7 @@ export default function LeaderboardScreen() {
         const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
         return {
           user_id: row.user_id ?? row.id ?? '',
-          // Never fall back to email (privacy)
-          display_name: safePublicName(row.display_name, row.username),
+          display_name: row.display_name ?? row.username ?? 'Unknown',
           avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
           xp_this_week: isNaN(xpValue) ? 0 : xpValue,
           level: Number(row.level ?? row.lvl ?? 1),
@@ -282,16 +263,34 @@ export default function LeaderboardScreen() {
   const friendsQuery = useQuery<FriendRow[]>({
     queryKey: ['friends', 'list'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_my_friends');
-      if (error) throw error;
+      // Prefer v2 (includes mutual_count). Fallback to v1 if not deployed yet.
+      const v2 = await supabase.rpc('get_my_friends_v2');
+      if (!v2.error) {
+        const rows = Array.isArray(v2.data) ? v2.data : [];
+        return rows.map((r: any) => ({
+          friend_user_id: String(r.friend_user_id),
+          username: String(r.username ?? ''),
+          display_name: String(r.display_name ?? r.username ?? 'Friend'),
+          avatar_url: r.avatar_url ?? null,
+          weekly_xp: safeNum(r.weekly_xp),
+          streak: safeNum(r.streak),
+          mutual_count: safeNum(r.mutual_count),
+        })) as FriendRow[];
+      }
 
-      return (data ?? []).map((r: any) => ({
+      // v1 fallback
+      const v1 = await supabase.rpc('get_my_friends');
+      if (v1.error) throw v1.error;
+
+      const rows = Array.isArray(v1.data) ? v1.data : [];
+      return rows.map((r: any) => ({
         friend_user_id: String(r.friend_user_id),
         username: String(r.username ?? ''),
-        display_name: safePublicName(r.display_name, r.username),
+        display_name: String(r.display_name ?? r.username ?? 'Friend'),
         avatar_url: r.avatar_url ?? null,
         weekly_xp: safeNum(r.weekly_xp),
         streak: safeNum(r.streak),
+        mutual_count: 0,
       })) as FriendRow[];
     },
     enabled: !!session && isFocused && activeTab === 'friends',
@@ -312,7 +311,7 @@ export default function LeaderboardScreen() {
         direction: (r.direction ?? 'incoming') as 'incoming' | 'outgoing',
         friend_user_id: String(r.friend_user_id),
         username: String(r.username ?? ''),
-        display_name: safePublicName(r.display_name, r.username),
+        display_name: String(r.display_name ?? r.username ?? 'User'),
         avatar_url: r.avatar_url ?? null,
         created_at: String(r.created_at ?? ''),
       })) as FriendRequestRow[];
@@ -353,32 +352,10 @@ export default function LeaderboardScreen() {
     [friendRequestsQuery.data]
   );
 
-  // Friend search suggestions (requires Supabase SQL RPC: public.search_users(p_query text))
-  const searchTerm = useMemo(() => {
-    const raw = (addUsername ?? '').trim();
-    const stripped = raw.startsWith('@') ? raw.slice(1) : raw;
-    return stripped.toLowerCase();
-  }, [addUsername]);
-
-  const friendSearchQuery = useQuery<UserSearchRow[]>({
-    queryKey: ['friends', 'search', searchTerm],
-    enabled: !!session && isFocused && activeTab === 'friends' && searchTerm.length >= 2,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('search_users', { p_query: searchTerm });
-      if (error) throw error;
-
-      return (data ?? []).map((r: any) => ({
-        user_id: String(r.user_id ?? r.id ?? ''),
-        username: String(r.username ?? ''),
-        display_name: r.display_name ?? null,
-        avatar_url: r.avatar_url ?? null,
-        relationship: (r.relationship ?? 'none') as UserSearchRow['relationship'],
-      })) as UserSearchRow[];
-    },
-    staleTime: 10_000,
-    refetchOnMount: 'always' as const,
-    retry: 0,
-  });
+  const selectedFriend = useMemo(
+    () => (friendsQuery.data ?? []).find((f) => f.friend_user_id === selectedFriendId) ?? null,
+    [friendsQuery.data, selectedFriendId]
+  );
 
   const refreshFriends = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['friends'] });
@@ -387,45 +364,38 @@ export default function LeaderboardScreen() {
   // ---------------------------
   // Friends Actions
   // ---------------------------
-  const sendFriendRequestFor = useCallback(
-    async (usernameRaw: string) => {
-      const username = (usernameRaw ?? '').trim();
-      if (!username) {
-        Alert.alert('Add Friend', 'Type a username like @Test31');
-        return;
-      }
-
-      setSendingRequest(true);
-      try {
-        const { data, error } = await supabase.rpc('send_friend_request', { p_username: username });
-        if (error) throw error;
-
-        setAddUsername('');
-        const status = (data as any)?.status;
-
-        if (status === 'already_friends') {
-          Alert.alert('Already friends', 'You are already friends with that user.');
-        } else if (status === 'incoming_request_exists') {
-          Alert.alert('Request already waiting', 'They already sent you a request. Accept it below.');
-        } else if (status === 'already_sent') {
-          Alert.alert('Request already sent', 'Your request is already pending.');
-        } else {
-          Alert.alert('Request sent', 'They will show up once they accept.');
-        }
-
-        refreshFriends();
-      } catch (e: any) {
-        Alert.alert('Could not send request', e?.message ?? String(e));
-      } finally {
-        setSendingRequest(false);
-      }
-    },
-    [refreshFriends]
-  );
-
   const handleSendRequest = useCallback(async () => {
-    await sendFriendRequestFor(addUsername);
-  }, [addUsername, sendFriendRequestFor]);
+    const username = addUsername.trim();
+    if (!username) {
+      Alert.alert('Add Friend', 'Type a username like @Test31');
+      return;
+    }
+
+    setSendingRequest(true);
+    try {
+      const { data, error } = await supabase.rpc('send_friend_request', { p_username: username });
+      if (error) throw error;
+
+      setAddUsername('');
+      const status = (data as any)?.status;
+
+      if (status === 'already_friends') {
+        Alert.alert('Already friends', 'You are already friends with that user.');
+      } else if (status === 'incoming_request_exists') {
+        Alert.alert('Request already waiting', 'They already sent you a request. Accept it below.');
+      } else if (status === 'already_sent') {
+        Alert.alert('Request already sent', 'Your request is already pending.');
+      } else {
+        Alert.alert('Request sent', 'They will show up once they accept.');
+      }
+
+      refreshFriends();
+    } catch (e: any) {
+      Alert.alert('Could not send request', e?.message ?? String(e));
+    } finally {
+      setSendingRequest(false);
+    }
+  }, [addUsername, refreshFriends]);
 
   const handleRespondRequest = useCallback(
     async (requestId: string, accept: boolean) => {
@@ -615,17 +585,20 @@ export default function LeaderboardScreen() {
     );
   };
 
-  const renderFriendItem = (friend: FriendRow, index: number) => {
+    const renderFriendItem = (friend: FriendRow, index: number) => {
     const isSelected = selectedFriendId === friend.friend_user_id;
-    const label = safePublicName(friend.display_name, friend.username);
+    const label = friend.display_name || friend.username;
+
+    const mutual = safeNum((friend as any).mutual_count);
+    const mutualLabel = mutual === 1 ? '1 mutual' : `${mutual} mutual`;
 
     const renderRightActions = () => (
       <Pressable
-        style={styles.swipeDeleteAction}
+        style={styles.swipeActionRemove}
         onPress={() => handleRemoveFriend(friend.friend_user_id, label)}
       >
         <Trash2 size={18} color="#fff" />
-        <Text style={styles.swipeDeleteText}>Remove</Text>
+        <Text style={styles.swipeActionText}>Remove</Text>
       </Pressable>
     );
 
@@ -645,20 +618,31 @@ export default function LeaderboardScreen() {
             </View>
 
             <View style={styles.friendInfo}>
-              <Text style={styles.userName}>{label}</Text>
-              <View style={styles.friendMeta}>
-                <Zap size={12} color={Colors.gold} />
-                <Text style={styles.userXp}>{friend.weekly_xp.toLocaleString()} XP</Text>
-                <Text style={styles.friendHandle}>@{friend.username}</Text>
+              <Text style={styles.userName} numberOfLines={1}>
+                {label}
+              </Text>
+              <Text style={styles.friendHandle}>@{friend.username}</Text>
+
+              <View style={styles.badgeRow}>
+                <View style={styles.badgePill}>
+                  <Zap size={12} color={Colors.gold} />
+                  <Text style={styles.badgeText}>{friend.weekly_xp.toLocaleString()} XP</Text>
+                </View>
+
+                <View style={styles.badgePillMuted}>
+                  <Users size={12} color={Colors.textSecondary} />
+                  <Text style={styles.badgeTextMuted}>{mutualLabel}</Text>
+                </View>
               </View>
-              {isSelected ? <Text style={styles.friendHint}>Swipe left to remove</Text> : null}
             </View>
 
             <View style={styles.friendRight}>
               <View style={styles.friendStreakBadgeLarge}>
                 <Flame size={14} color="#FF6B6B" />
-                <Text style={styles.friendStreakNumLarge}>{friend.streak}d</Text>
+                <Text style={styles.friendStreakNumLarge}>{friend.streak}</Text>
+                <Text style={styles.friendStreakSuffix}>d</Text>
               </View>
+
               <ChevronRight
                 size={16}
                 color={Colors.textTertiary}
@@ -683,52 +667,51 @@ export default function LeaderboardScreen() {
 
   const renderRequestRow = (r: FriendRequestRow) => {
     const busy = actionBusyId === r.request_id;
-    const label = safePublicName(r.display_name, r.username);
+    const label = r.display_name || r.username;
 
-    if (r.direction === 'incoming') {
+    if (r.direction === 'outgoing') {
+      const renderRightActions = () => (
+        <Pressable
+          style={styles.swipeActionCancel}
+          disabled={busy}
+          onPress={() => handleCancelRequest(r.request_id)}
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <XCircle size={18} color="#fff" />
+          )}
+          <Text style={styles.swipeActionText}>Cancel</Text>
+        </Pressable>
+      );
+
       return (
-        <View key={r.request_id} style={styles.requestRow}>
-          <View style={styles.requestLeft}>
-            <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
-              <Text style={styles.avatarText}>👤</Text>
+        <Swipeable
+          key={r.request_id}
+          renderRightActions={renderRightActions}
+          overshootRight={false}
+        >
+          <View style={styles.requestRow}>
+            <View style={styles.requestLeft}>
+              <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
+                <Text style={styles.avatarText}>👤</Text>
+              </View>
+              <View style={styles.requestInfo}>
+                <Text style={styles.requestName}>{label}</Text>
+                <Text style={styles.requestHandle}>@{r.username}</Text>
+              </View>
             </View>
-            <View style={styles.requestInfo}>
-              <Text style={styles.requestName}>{label}</Text>
-              <Text style={styles.requestHandle}>@{r.username}</Text>
+
+            <View style={styles.pendingPill}>
+              <Clock size={12} color={Colors.textSecondary} />
+              <Text style={styles.pendingText}>Pending</Text>
             </View>
           </View>
-
-          <View style={styles.requestButtons}>
-            <Pressable
-              style={[styles.requestBtn, styles.acceptBtn, busy && { opacity: 0.6 }]}
-              disabled={busy}
-              onPress={() => handleRespondRequest(r.request_id, true)}
-            >
-              {busy ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <CheckCircle2 size={16} color="#fff" />
-              )}
-              <Text style={styles.requestBtnText}>Accept</Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.requestBtn, styles.declineBtn, busy && { opacity: 0.6 }]}
-              disabled={busy}
-              onPress={() => handleRespondRequest(r.request_id, false)}
-            >
-              {busy ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <XCircle size={16} color="#fff" />
-              )}
-              <Text style={styles.requestBtnText}>Decline</Text>
-            </Pressable>
-          </View>
-        </View>
+        </Swipeable>
       );
     }
 
+    // Incoming
     return (
       <View key={r.request_id} style={styles.requestRow}>
         <View style={styles.requestLeft}>
@@ -741,19 +724,38 @@ export default function LeaderboardScreen() {
           </View>
         </View>
 
-        <Pressable
-          style={[styles.requestBtn, styles.cancelBtn, busy && { opacity: 0.6 }]}
-          disabled={busy}
-          onPress={() => handleCancelRequest(r.request_id)}
-        >
-          {busy ? <ActivityIndicator size="small" color="#fff" /> : <XCircle size={16} color="#fff" />}
-          <Text style={styles.requestBtnText}>Cancel</Text>
-        </Pressable>
+        <View style={styles.requestActionsCompact}>
+          <Pressable
+            accessibilityLabel={`Accept @${r.username}`}
+            style={[styles.iconActionBtn, styles.iconActionAccept, busy && { opacity: 0.6 }]}
+            disabled={busy}
+            onPress={() => handleRespondRequest(r.request_id, true)}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <CheckCircle2 size={18} color="#fff" />
+            )}
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel={`Decline @${r.username}`}
+            style={[styles.iconActionBtn, styles.iconActionDecline, busy && { opacity: 0.6 }]}
+            disabled={busy}
+            onPress={() => handleRespondRequest(r.request_id, false)}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <XCircle size={18} color="#fff" />
+            )}
+          </Pressable>
+        </View>
       </View>
     );
   };
 
-  const renderLoadingState = (label = 'Loading...') => (
+const renderLoadingState = (label = 'Loading...') => (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color={Colors.primary} />
       <Text style={styles.loadingText}>{label}</Text>
@@ -981,7 +983,8 @@ export default function LeaderboardScreen() {
               )
             ) : (
               <>
-                <View style={styles.addFriendCard}>
+                
+<View style={styles.addFriendCard}>
                   <View style={styles.addFriendTitleRow}>
                     <UserPlus size={18} color={Colors.primary} />
                     <Text style={styles.addFriendTitle}>Add Friends</Text>
@@ -996,8 +999,6 @@ export default function LeaderboardScreen() {
                       onChangeText={setAddUsername}
                       autoCapitalize="none"
                       autoCorrect={false}
-                      returnKeyType="send"
-                      onSubmitEditing={handleSendRequest}
                     />
                     <Pressable
                       style={[styles.addFriendBtn, sendingRequest && { opacity: 0.6 }]}
@@ -1011,68 +1012,6 @@ export default function LeaderboardScreen() {
                       )}
                     </Pressable>
                   </View>
-
-                  {/* Search Suggestions (requires Supabase RPC: search_users) */}
-                  {searchTerm.length >= 2 ? (
-                    <View style={styles.searchResultsCard}>
-                      {friendSearchQuery.isLoading ? (
-                        <View style={styles.searchLoadingRow}>
-                          <ActivityIndicator size="small" color={Colors.primary} />
-                          <Text style={styles.searchLoadingText}>Searching…</Text>
-                        </View>
-                      ) : friendSearchQuery.isError ? (
-                        <Text style={styles.searchEmptyText}>Search unavailable (SQL not installed yet).</Text>
-                      ) : (friendSearchQuery.data ?? []).length === 0 ? (
-                        <Text style={styles.searchEmptyText}>No users found.</Text>
-                      ) : (
-                        (friendSearchQuery.data ?? []).map((u, idx) => {
-                          const label = safePublicName(u.display_name, u.username);
-                          const rel = u.relationship ?? 'none';
-                          const isDisabled = rel !== 'none';
-                          const badgeText =
-                            rel === 'already_friends'
-                              ? 'Friends'
-                              : rel === 'outgoing_pending'
-                                ? 'Requested'
-                                : rel === 'incoming_pending'
-                                  ? 'Incoming'
-                                  : '';
-
-                          return (
-                            <View
-                              key={u.user_id}
-                              style={[styles.searchRow, idx > 0 && styles.searchRowDivider]}
-                            >
-                              <View style={styles.searchRowLeft}>
-                                <View style={[styles.avatarCircle, styles.searchAvatar]}>
-                                  <Text style={styles.avatarText}>👤</Text>
-                                </View>
-                                <View style={styles.searchRowInfo}>
-                                  <Text style={styles.searchName} numberOfLines={1}>
-                                    {label}
-                                  </Text>
-                                  <Text style={styles.searchHandle}>@{u.username}</Text>
-                                </View>
-                              </View>
-
-                              {isDisabled ? (
-                                <View style={styles.searchBadge}>
-                                  <Text style={styles.searchBadgeText}>{badgeText}</Text>
-                                </View>
-                              ) : (
-                                <Pressable
-                                  style={styles.searchAddBtn}
-                                  onPress={() => sendFriendRequestFor(`@${u.username}`)}
-                                >
-                                  <Text style={styles.searchAddBtnText}>Add</Text>
-                                </Pressable>
-                              )}
-                            </View>
-                          );
-                        })
-                      )}
-                    </View>
-                  ) : null}
 
                   <Pressable style={styles.findFriendsBtn} onPress={handleFindMyFriends}>
                     <Users size={16} color="#fff" />
@@ -1094,12 +1033,14 @@ export default function LeaderboardScreen() {
                 {outgoingRequests.length > 0 ? (
                   <View style={styles.sectionBlock}>
                     <Text style={styles.sectionHeader}>Pending Requests</Text>
+                    <Text style={styles.sectionHintText}>Swipe left to cancel.</Text>
                     {outgoingRequests.map(renderRequestRow)}
                   </View>
                 ) : null}
 
                 <View style={styles.sectionBlock}>
                   <Text style={styles.sectionHeader}>Friends</Text>
+                  <Text style={styles.sectionHintText}>Swipe left on a friend to remove.</Text>
 
                   {friends.length === 0 ? (
                     <View style={styles.emptyState}>
@@ -1522,51 +1463,6 @@ const styles = StyleSheet.create({
   },
   addFriendBtnText: { color: '#fff', fontWeight: '900' as const },
 
-  // Search suggestions
-  searchResultsCard: {
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: 14,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 10,
-  },
-  searchLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
-  searchLoadingText: { fontSize: 12, fontWeight: '700' as const, color: Colors.textSecondary },
-  searchEmptyText: { fontSize: 12, fontWeight: '700' as const, color: Colors.textTertiary, paddingVertical: 6 },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    paddingVertical: 10,
-  },
-  searchRowDivider: { borderTopWidth: 1, borderTopColor: Colors.border },
-  searchRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  searchAvatar: { width: 34, height: 34, borderRadius: 17, marginLeft: 0 },
-  searchRowInfo: { flex: 1 },
-  searchName: { fontSize: 13, fontWeight: '900' as const, color: Colors.text },
-  searchHandle: { fontSize: 11, fontWeight: '700' as const, color: Colors.textTertiary, marginTop: 2 },
-  searchBadge: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  searchBadgeText: { fontSize: 11, fontWeight: '900' as const, color: Colors.textSecondary },
-  searchAddBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    minWidth: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchAddBtnText: { color: '#fff', fontWeight: '900' as const, fontSize: 12 },
-
   findFriendsBtn: {
     marginTop: 2,
     flexDirection: 'row',
@@ -1625,46 +1521,10 @@ const styles = StyleSheet.create({
   friendInfo: { flex: 1, marginLeft: 12 },
   friendMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
   friendHandle: { fontSize: 11, color: Colors.textTertiary, fontWeight: '700' as const },
-  friendHint: { fontSize: 11, color: Colors.textTertiary, fontWeight: '700' as const, marginTop: 4 },
 
   friendRight: { alignItems: 'center', gap: 6 },
-  friendStreakBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: Colors.accentLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
+  friendStreakBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: Colors.accentLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   friendStreakNum: { fontSize: 11, fontWeight: '900' as const, color: Colors.accent },
-
-  // Bigger / more noticeable streak pill (Friends tab)
-  friendStreakBadgeLarge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255, 107, 107, 0.16)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 107, 0.25)',
-  },
-  friendStreakNumLarge: { fontSize: 13, fontWeight: '900' as const, color: '#C2410C' },
-
-  // Swipe-to-delete action (hidden until swipe)
-  swipeDeleteAction: {
-    width: 92,
-    flex: 1,
-    marginVertical: 4,
-    borderRadius: 16,
-    backgroundColor: Colors.error,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  swipeDeleteText: { color: '#fff', fontWeight: '900' as const, fontSize: 12 },
 
   expandedSection: { paddingHorizontal: 4, marginBottom: 12 },
   friendActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 10 },
@@ -1756,4 +1616,124 @@ const styles = StyleSheet.create({
 
   privacyNote: { marginTop: 12, padding: 14, backgroundColor: Colors.surface, borderRadius: 14, borderWidth: 1, borderColor: Colors.surfaceAlt },
   privacyText: { fontSize: 12, fontWeight: '500' as const, color: Colors.textTertiary, lineHeight: 18, textAlign: 'center' as const },
+
+  // --- Friend polish (compact buttons, swipe actions, badges) ---
+  sectionHintText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textTertiary,
+  },
+
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.goldLight,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  badgePillMuted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: '#92400E',
+  },
+  badgeTextMuted: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: Colors.textSecondary,
+  },
+
+  friendStreakBadgeLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.accentLight,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.25)',
+    gap: 6,
+  },
+  friendStreakNumLarge: {
+    fontSize: 14,
+    fontWeight: '900' as const,
+    color: Colors.accent,
+  },
+  friendStreakSuffix: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: Colors.accent,
+  },
+
+  requestActionsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  iconActionBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconActionAccept: { backgroundColor: Colors.success },
+  iconActionDecline: { backgroundColor: Colors.error },
+
+  pendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  pendingText: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: Colors.textSecondary,
+  },
+
+  swipeActionRemove: {
+    width: 96,
+    backgroundColor: Colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginVertical: 6,
+    borderRadius: 14,
+  },
+  swipeActionCancel: {
+    width: 96,
+    backgroundColor: Colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginVertical: 6,
+    borderRadius: 14,
+  },
+  swipeActionText: {
+    fontSize: 12,
+    fontWeight: '900' as const,
+    color: '#fff',
+  },
+
 });
