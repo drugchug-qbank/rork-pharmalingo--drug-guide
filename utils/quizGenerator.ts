@@ -18,6 +18,54 @@ function unique<T>(arr: T[]): T[] {
   return [...new Set(arr)];
 }
 
+/**
+ * De-dupe options in a case/whitespace-insensitive way (prevents identical-looking duplicates like "Edema" twice).
+ */
+function optionKey(s: string): string {
+  return (s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function dedupeOptions(options: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const opt of options) {
+    const trimmed = (opt ?? '').trim();
+    if (!trimmed) continue;
+    const key = optionKey(trimmed);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+/**
+ * Ensures options are unique and (when possible) padded to the desired count.
+ * Returns a shuffled array for nice randomness in the UI.
+ */
+function finalizeOptions(options: string[], desiredCount: number, fallbackPool: string[] = []): string[] {
+  let result = dedupeOptions(options);
+
+  if (result.length < desiredCount && fallbackPool.length) {
+    const fallback = shuffleArray(dedupeOptions(fallbackPool));
+    for (const cand of fallback) {
+      if (result.length >= desiredCount) break;
+      const key = optionKey(cand);
+      if (result.some((x) => optionKey(x) === key)) continue;
+      result.push(cand.trim());
+    }
+  }
+
+  if (result.length > desiredCount) {
+    result = result.slice(0, desiredCount);
+  }
+
+  return shuffleArray(result);
+}
+
 function uid(prefix: string, drugId?: string): string {
   return `${prefix}-${drugId ?? 'x'}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -149,25 +197,60 @@ function getDistractorsSmart(
   return unique([...fromPrimary, ...fromFallback]).slice(0, count);
 }
 
+
+/**
+ * Like getDistractorsSmart, but excludes ANY values in the `forbidden` list as distractors.
+ * This prevents confusing situations where multiple answers are "technically correct"
+ * (e.g., HCTZ: HTN AND edema) when the question expects only one correct option.
+ */
+function getDistractorsSmartExcluding(
+  correct: string,
+  primaryPool: string[],
+  fallbackPool: string[],
+  count: number,
+  forbidden: string[]
+): string[] {
+  const banned = new Set<string>([correct, ...forbidden].map(optionKey));
+
+  const primary = dedupeOptions(primaryPool).filter((o) => !banned.has(optionKey(o)));
+  const fromPrimary = shuffleArray(primary).slice(0, count);
+  if (fromPrimary.length >= count) return fromPrimary;
+
+  const needed = count - fromPrimary.length;
+  const usedKeys = new Set(fromPrimary.map(optionKey));
+
+  const fallback = dedupeOptions(fallbackPool).filter((o) => {
+    const k = optionKey(o);
+    return !banned.has(k) && !usedKeys.has(k);
+  });
+
+  const fromFallback = shuffleArray(fallback).slice(0, needed);
+  return [...fromPrimary, ...fromFallback];
+}
+
 function withPhase(q: QuizQuestion, phase: QuizQuestionPhase): QuizQuestion {
   return { ...q, phase };
 }
 
 function brandToGeneric(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
   const similar = getSimilarDrugs(drug, pool);
+  const allGenerics = drugs.map((d) => d.genericName);
   const distractors = getDistractorsSmart(
     drug.genericName,
     similar.map((d) => d.genericName),
-    drugs.map((d) => d.genericName),
+    allGenerics,
     3
   );
+
+  const options = finalizeOptions([drug.genericName, ...distractors], 4, allGenerics);
+
   return withPhase(
     {
       id: uid('q-btg', drug.id),
       type: 'brand_to_generic',
       question: `What is the generic name for ${drug.brandName}?`,
       correctAnswer: drug.genericName,
-      options: shuffleArray([drug.genericName, ...distractors]),
+      options,
       drugId: drug.id,
       explanation: `${drug.brandName} is the brand name for ${drug.genericName}.`,
     },
@@ -177,19 +260,23 @@ function brandToGeneric(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qui
 
 function genericToBrand(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
   const similar = getSimilarDrugs(drug, pool);
+  const allBrands = drugs.map((d) => d.brandName);
   const distractors = getDistractorsSmart(
     drug.brandName,
     similar.map((d) => d.brandName),
-    drugs.map((d) => d.brandName),
+    allBrands,
     3
   );
+
+  const options = finalizeOptions([drug.brandName, ...distractors], 4, allBrands);
+
   return withPhase(
     {
       id: uid('q-gtb', drug.id),
       type: 'generic_to_brand',
       question: `What is the brand name for ${drug.genericName}?`,
       correctAnswer: drug.brandName,
-      options: shuffleArray([drug.brandName, ...distractors]),
+      options,
       drugId: drug.id,
       explanation: `${drug.genericName} is commonly known by the brand ${drug.brandName}.`,
     },
@@ -199,14 +286,15 @@ function genericToBrand(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qui
 
 function clozeBrandToGeneric(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
   const similar = getSimilarDrugs(drug, pool);
+  const allGenerics = drugs.map((d) => d.genericName);
   const distractors = getDistractorsSmart(
     drug.genericName,
     similar.map((d) => d.genericName),
-    drugs.map((d) => d.genericName),
+    allGenerics,
     3
   );
 
-  const wordBank = shuffleArray([drug.genericName, ...distractors]);
+  const wordBank = finalizeOptions([drug.genericName, ...distractors], 4, allGenerics);
 
   return withPhase(
     {
@@ -229,14 +317,15 @@ function clozeBrandToGeneric(drug: Drug, pool: Drug[], phase: QuizQuestionPhase)
 
 function clozeGenericToBrand(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
   const similar = getSimilarDrugs(drug, pool);
+  const allBrands = drugs.map((d) => d.brandName);
   const distractors = getDistractorsSmart(
     drug.brandName,
     similar.map((d) => d.brandName),
-    drugs.map((d) => d.brandName),
+    allBrands,
     3
   );
 
-  const wordBank = shuffleArray([drug.brandName, ...distractors]);
+  const wordBank = finalizeOptions([drug.brandName, ...distractors], 4, allBrands);
 
   return withPhase(
     {
@@ -247,7 +336,7 @@ function clozeGenericToBrand(drug: Drug, pool: Drug[], phase: QuizQuestionPhase)
       options: wordBank,
       drugId: drug.id,
       cloze: {
-        parts: [`The brand for ${drug.genericName} is `, '.'],
+        parts: [`A common brand for ${drug.genericName} is `, '.'],
         wordBank,
         correctWords: [drug.brandName],
       },
@@ -259,11 +348,18 @@ function clozeGenericToBrand(drug: Drug, pool: Drug[], phase: QuizQuestionPhase)
 
 function clozeIndication(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
   const correct = drug.indications?.[0] ?? 'Hypertension';
+  const myIndications = unique(drug.indications ?? []);
   const allIndications = unique(drugs.flatMap((d) => d.indications ?? []));
+
   const similar = getSimilarDrugs(drug, pool);
   const similarIndications = unique(similar.flatMap((d) => d.indications ?? []));
-  const distractors = getDistractorsSmart(correct, similarIndications, allIndications, 3);
-  const wordBank = shuffleArray([correct, ...distractors]);
+
+  // Exclude any other true indications for THIS drug so we don't accidentally show multiple "correct" options.
+  const distractors = getDistractorsSmartExcluding(correct, similarIndications, allIndications, 3, myIndications);
+
+  const banned = new Set(myIndications.map(optionKey));
+  const fillerPool = allIndications.filter((x) => !banned.has(optionKey(x)));
+  const wordBank = finalizeOptions([correct, ...distractors], 4, fillerPool);
 
   return withPhase(
     {
@@ -286,11 +382,18 @@ function clozeIndication(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qu
 
 function clozeSideEffect(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
   const correct = drug.sideEffects?.[0] ?? 'Dizziness';
+  const mySE = unique(drug.sideEffects ?? []);
   const allSE = unique(drugs.flatMap((d) => d.sideEffects ?? []));
+
   const similar = getSimilarDrugs(drug, pool);
   const similarSE = unique(similar.flatMap((d) => d.sideEffects ?? []));
-  const distractors = getDistractorsSmart(correct, similarSE, allSE, 3);
-  const wordBank = shuffleArray([correct, ...distractors]);
+
+  // Exclude any other true side effects for THIS drug so we don't show multiple "technically correct" options.
+  const distractors = getDistractorsSmartExcluding(correct, similarSE, allSE, 3, mySE);
+
+  const banned = new Set(mySE.map(optionKey));
+  const fillerPool = allSE.filter((x) => !banned.has(optionKey(x)));
+  const wordBank = finalizeOptions([correct, ...distractors], 4, fillerPool);
 
   return withPhase(
     {
@@ -357,17 +460,26 @@ function clozeQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Quiz
 
 function indicationPrimary(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
   const correct = drug.indications?.[0] ?? 'Hypertension';
+  const myIndications = unique(drug.indications ?? []);
   const allIndications = unique(drugs.flatMap((d) => d.indications ?? []));
+
   const similar = getSimilarDrugs(drug, pool);
   const similarIndications = unique(similar.flatMap((d) => d.indications ?? []));
-  const distractors = getDistractorsSmart(correct, similarIndications, allIndications, 3);
+
+  // Exclude other true indications for this drug from distractors (prevents multiple correct choices).
+  const distractors = getDistractorsSmartExcluding(correct, similarIndications, allIndications, 3, myIndications);
+
+  const banned = new Set(myIndications.map(optionKey));
+  const fillerPool = allIndications.filter((x) => !banned.has(optionKey(x)));
+  const options = finalizeOptions([correct, ...distractors], 4, fillerPool);
+
   return withPhase(
     {
       id: uid('q-ind', drug.id),
       type: 'indication',
       question: `${drug.brandName} (${drug.genericName}) is primarily indicated for:`,
       correctAnswer: correct,
-      options: shuffleArray([correct, ...distractors]),
+      options,
       drugId: drug.id,
       explanation: `Primary indication: ${correct}.`,
     },
@@ -406,17 +518,26 @@ function notIndication(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Quiz
 
 function sideEffectCommon(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
   const correct = drug.sideEffects?.[0] ?? 'Dizziness';
+  const mySE = unique(drug.sideEffects ?? []);
   const allSE = unique(drugs.flatMap((d) => d.sideEffects ?? []));
+
   const similar = getSimilarDrugs(drug, pool);
   const similarSE = unique(similar.flatMap((d) => d.sideEffects ?? []));
-  const distractors = getDistractorsSmart(correct, similarSE, allSE, 3);
+
+  // Exclude other true side effects for this drug from distractors (prevents multiple correct choices).
+  const distractors = getDistractorsSmartExcluding(correct, similarSE, allSE, 3, mySE);
+
+  const banned = new Set(mySE.map(optionKey));
+  const fillerPool = allSE.filter((x) => !banned.has(optionKey(x)));
+  const options = finalizeOptions([correct, ...distractors], 4, fillerPool);
+
   return withPhase(
     {
       id: uid('q-se', drug.id),
       type: 'side_effect',
       question: `Which is a common side effect of ${drug.brandName} (${drug.genericName})?`,
       correctAnswer: correct,
-      options: shuffleArray([correct, ...distractors]),
+      options,
       drugId: drug.id,
       explanation: `Common side effect: ${correct}.`,
     },
@@ -458,13 +579,16 @@ function drugClassQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): 
   const key = classKey(drug.drugClass);
   const similarClasses = unique(drugs.filter((d) => classKey(d.drugClass) === key).map((d) => d.drugClass));
   const distractors = getDistractorsSmart(drug.drugClass, similarClasses, allClasses, 3);
+
+  const options = finalizeOptions([drug.drugClass, ...distractors], 4, allClasses);
+
   return withPhase(
     {
       id: uid('q-class', drug.id),
       type: 'drug_class',
       question: `${drug.brandName} (${drug.genericName}) belongs to which drug class?`,
       correctAnswer: drug.drugClass,
-      options: shuffleArray([drug.drugClass, ...distractors]),
+      options,
       drugId: drug.id,
       explanation: `Drug class: ${drug.drugClass}.`,
     },
@@ -477,13 +601,16 @@ function dosingQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qui
   const similar = getSimilarDrugs(drug, pool);
   const similarDosing = unique(similar.map((d) => d.commonDosing));
   const distractors = getDistractorsSmart(drug.commonDosing, similarDosing, allDosing, 3);
+
+  const options = finalizeOptions([drug.commonDosing, ...distractors], 4, allDosing);
+
   return withPhase(
     {
       id: uid('q-dose', drug.id),
       type: 'dosing',
       question: `What is a common dosing for ${drug.brandName} (${drug.genericName})?`,
       correctAnswer: drug.commonDosing,
-      options: shuffleArray([drug.commonDosing, ...distractors]),
+      options,
       drugId: drug.id,
       explanation: `Common dosing: ${drug.commonDosing}.`,
     },
@@ -494,18 +621,22 @@ function dosingQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qui
 function keyFactToDrug(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
   const similar = getSimilarDrugs(drug, pool);
   const candidates = shuffleArray(unique([drug, ...similar, ...shuffleArray(drugs).slice(0, 10)]));
+
   const distractors = candidates
     .filter((d) => d.id !== drug.id)
-    .slice(0, 3)
+    .slice(0, 8) // take extra, then dedupe/pick
     .map((d) => d.genericName);
+
+  const allGenerics = drugs.map((d) => d.genericName);
+  const options = finalizeOptions([drug.genericName, ...distractors], 4, allGenerics);
 
   return withPhase(
     {
       id: uid('q-fact', drug.id),
       type: 'key_fact',
-      question: `Which drug matches this clinical pearl?\n“${drug.keyFact}”`,
+      question: `Which drug best matches this clinical pearl?\n\n“${drug.keyFact}”`,
       correctAnswer: drug.genericName,
-      options: shuffleArray([drug.genericName, ...distractors]),
+      options,
       drugId: drug.id,
       explanation: drug.keyFact,
     },
@@ -520,8 +651,15 @@ function classComparison(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qu
     return drugClassQuestion(drug, pool, phase);
   }
   const correctDrug = sampleOne(same);
-  const distractorDrugs = shuffleArray(drugs.filter((d) => classKey(d.drugClass) !== key)).slice(0, 3);
-  const options = shuffleArray([correctDrug.genericName, ...distractorDrugs.map((d) => d.genericName)]);
+  const distractorDrugs = shuffleArray(drugs.filter((d) => classKey(d.drugClass) !== key)).slice(0, 6);
+
+  const allGenerics = drugs.map((d) => d.genericName);
+  const options = finalizeOptions(
+    [correctDrug.genericName, ...distractorDrugs.map((d) => d.genericName)],
+    4,
+    allGenerics
+  );
+
   return withPhase(
     {
       id: uid('q-class-compare', drug.id),
@@ -543,9 +681,10 @@ function suffixQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qui
   }
 
   const correct = SUFFIX_TO_CLASS[suf] ?? 'Drug class pattern';
-  const distractors = shuffleArray(
-    unique(Object.values(SUFFIX_TO_CLASS)).filter((x) => x !== correct)
-  ).slice(0, 3);
+  const poolClasses = unique(Object.values(SUFFIX_TO_CLASS));
+  const distractors = shuffleArray(poolClasses.filter((x) => x !== correct)).slice(0, 6);
+
+  const options = finalizeOptions([correct, ...distractors], 4, poolClasses);
 
   return withPhase(
     {
@@ -553,7 +692,7 @@ function suffixQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Qui
       type: 'suffix',
       question: `${drug.genericName} ends in “-${suf}”. That suffix is most associated with:`,
       correctAnswer: correct,
-      options: shuffleArray([correct, ...distractors]),
+      options,
       drugId: drug.id,
       explanation: `Suffix pearl: -${suf} → ${correct} (high-yield naming pattern).`,
     },
