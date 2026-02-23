@@ -104,6 +104,7 @@ export default function LessonCompleteScreen() {
     starEarned?: string;
     newStars?: string;
     prevStars?: string;
+    rewardsDisabled?: string;
   }>();
 
   const router = useRouter();
@@ -122,6 +123,7 @@ export default function LessonCompleteScreen() {
   const streakCount = parseInt(params.streakCount ?? '0', 10);
   const perfectBonus = parseInt(params.perfectBonus ?? '0', 10);
   const isPractice = params.isPractice === 'true';
+  const rewardsDisabled = params.rewardsDisabled === 'true';
   const highestCombo = parseInt(params.highestCombo ?? '0', 10);
   const comboBonusCoins = parseInt(params.comboBonusCoins ?? '0', 10);
   const starEarned = params.starEarned === 'true';
@@ -295,6 +297,7 @@ export default function LessonCompleteScreen() {
   };
 
   const streakLabel = useMemo(() => {
+    if (streakStatus === 'not-counted') return 'Score ≥70% to save streak 🔥';
     if (streakStatus === 'incremented') return `Streak +1! Now ${streakCount} days 🔥`;
     if (streakStatus === 'kept') return `${streakCount} day streak kept! 🔥`;
     return `New streak started! 🔥`;
@@ -439,7 +442,7 @@ export default function LessonCompleteScreen() {
           </View>
         )}
 
-        {streakCount > 0 && (
+        {(streakCount > 0 || streakStatus === 'not-counted') && (
           <Animated.View style={[
             styles.streakBanner,
             { transform: [{ scale: streakPulse }] },
@@ -457,25 +460,26 @@ export default function LessonCompleteScreen() {
           transform: [{ translateY: buttonsSlide }],
         },
       ]}>
-        {!lootCollected ? (
-          <Pressable
-            onPress={handleOpenChest}
-            style={({ pressed }) => [
-              styles.lootButton,
-              pressed && styles.buttonPressed,
-            ]}
-            testID="lesson-complete-loot"
-          >
-            <Text style={styles.lootButtonEmoji}>🎁</Text>
-            <Text style={styles.lootButtonText}>Open Reward Chest!</Text>
-          </Pressable>
-        ) : (
-          <View style={styles.lootCollectedBanner}>
-            <Text style={styles.lootCollectedText}>
-              {lootReward?.emoji} {lootReward?.label} collected!
-            </Text>
-          </View>
-        )}
+        {!rewardsDisabled &&
+          (!lootCollected ? (
+            <Pressable
+              onPress={handleOpenChest}
+              style={({ pressed }) => [
+                styles.lootButton,
+                pressed && styles.buttonPressed,
+              ]}
+              testID="lesson-complete-loot"
+            >
+              <Text style={styles.lootButtonEmoji}>🎁</Text>
+              <Text style={styles.lootButtonText}>Open Reward Chest!</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.lootCollectedBanner}>
+              <Text style={styles.lootCollectedText}>
+                {lootReward?.emoji} {lootReward?.label} collected!
+              </Text>
+            </View>
+          ))}
 
         <Pressable
           onPress={handleContinue}
@@ -504,11 +508,13 @@ export default function LessonCompleteScreen() {
         )}
       </Animated.View>
 
-      <LootChestModal
-        visible={showLootChest}
-        reward={lootReward}
-        onDismiss={handleLootCollected}
-      />
+      {!rewardsDisabled && (
+        <LootChestModal
+          visible={showLootChest}
+          reward={lootReward}
+          onDismiss={handleLootCollected}
+        />
+      )}
     </View>
   );
 }

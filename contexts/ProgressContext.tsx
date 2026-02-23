@@ -684,6 +684,30 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
     setStreakBreakPending(false);
   }, [updateProgress]);
 
+  /**
+   * Record *any* qualifying activity as "streak safe" for today.
+   *
+   * Used by special practice modes (e.g., Brand Blitz) that may award 0 XP/coins
+   * but still want to count toward streak when the user performs well.
+   */
+  const recordStreakActivity = useCallback(
+    (nowISO: string = new Date().toISOString()) => {
+      updateProgress((prev) => {
+        const streakUpdate = updateStreakOnLessonComplete(nowISO, prev.stats);
+        return {
+          ...prev,
+          stats: {
+            ...prev.stats,
+            ...streakUpdate,
+          },
+        };
+      });
+      // If a streak-break prompt was pending, completing an activity should dismiss it.
+      setStreakBreakPending(false);
+    },
+    [updateProgress]
+  );
+
   const dismissStreakBreak = useCallback(() => {
     setStreakBreakPending(false);
   }, []);
@@ -1222,6 +1246,26 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
     [progress.completedLessons]
   );
 
+  /**
+   * Aggregated pool of drug IDs that belong to lessons the user can currently access ("unlocked").
+   *
+   * This is intentionally different from `getUnlockedDrugIds()` (which reflects *seen* drugs)
+   * because practice modes like Brand Blitz should only pull from content the user has unlocked
+   * in the Learn path.
+   */
+  const getUnlockedLessonDrugIds = useCallback((): string[] => {
+    const ids: string[] = [];
+    for (const ch of chapters) {
+      if (ch.id === 'mod-11') continue; // exclude End Game / special module
+      ch.parts.forEach((p, idx) => {
+        if (isLessonUnlocked(ch.id, idx)) {
+          ids.push(...(p.drugIds ?? []));
+        }
+      });
+    }
+    return Array.from(new Set(ids));
+  }, [isLessonUnlocked]);
+
   const accuracy = useMemo(() => {
     if (progress.stats.accuracyTotal === 0) return 0;
     return Math.round((progress.stats.accuracyCorrect / progress.stats.accuracyTotal) * 100);
@@ -1466,6 +1510,7 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
     buyStreakSave,
     useStreakSave,
     acceptStreakBreak,
+    recordStreakActivity,
     dismissStreakBreak,
     streakBreakPending,
 
@@ -1480,6 +1525,7 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
     getDueForReviewDrugIds,
     getLowMasteryDrugIds,
     getUnlockedDrugIds,
+    getUnlockedLessonDrugIds,
 
     addMistakes,
     removeMistakesByDrug,

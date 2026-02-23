@@ -1210,6 +1210,52 @@ export function generateMasteringQuestions(drugIds: string[], count: number = 30
 }
 
 /**
+ * Brand Blitz (Practice)
+ * - 15 questions (default)
+ * - ONLY brand ↔ generic questions
+ * - Intended to pull from *unlocked* lesson content (caller provides the pool)
+ * - No XP/coins are awarded by the caller
+ */
+export function generateBrandBlitzQuestions(drugIds: string[], count: number = 15): QuizQuestion[] {
+  const pool = getDrugsByIds(unique(drugIds));
+  if (pool.length === 0 || count <= 0) return [];
+
+  const phase: QuizQuestionPhase = 'review';
+
+  // Add one matching question when possible (highly gamified brand↔generic drill)
+  const includeMatching = pool.length >= 4 && count >= 10;
+  const effectiveCount = includeMatching ? Math.max(1, count - 1) : count;
+
+  const shuffled = shuffleArray(pool);
+  const questions: QuizQuestion[] = [];
+
+  for (let i = 0; i < effectiveCount; i++) {
+    const drug = shuffled[i % shuffled.length];
+
+    // Keep a balanced mix of directions. Sprinkle in cloze for variety.
+    const isBrandToGeneric = i % 2 === 0;
+    const useCloze = Math.random() < 0.35;
+
+    if (isBrandToGeneric) {
+      questions.push((useCloze ? clozeBrandToGeneric : brandToGeneric)(drug, pool, phase));
+    } else {
+      questions.push((useCloze ? clozeGenericToBrand : genericToBrand)(drug, pool, phase));
+    }
+  }
+
+  if (includeMatching) {
+    const matchQ = generateMatchingQuestion(pool, phase);
+    if (matchQ) questions.push(matchQ);
+    else {
+      const drug = shuffled[effectiveCount % shuffled.length];
+      questions.push(sampleOne(BRAND_GENERIC_GENERATORS)(drug, pool, phase));
+    }
+  }
+
+  return shuffleArray(questions).slice(0, count);
+}
+
+/**
  * End Game Challenge (Module 11)
  * - Total: 15 questions
  * - 2–4 come from PharmaLingo drug bank (mixed review across all modules)
