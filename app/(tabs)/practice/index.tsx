@@ -151,7 +151,7 @@ export default function PracticeScreen() {
               </Text>
             </View>
             <View style={styles.playCircle}>
-              <Dumbbell size={20} color={Colors.primary} />
+              <Dumbbell size={20} color={Colors.chapterColors[2]} />
             </View>
           </LinearGradient>
         </Pressable>

@@ -1142,8 +1142,9 @@ export function generateQuestionsFromDrugIds(
 }
 
 
-export function generatePracticeQuestions(count: number = 10): QuizQuestion[] {
-  return generateQuestionsFromDrugIds(drugs.map((d) => d.id), count, 'quiz');
+export function generatePracticeQuestions(count: number = 10, drugIds?: string[]): QuizQuestion[] {
+  const poolIds = drugIds && drugIds.length > 0 ? unique(drugIds) : drugs.map((d) => d.id);
+  return generateQuestionsFromDrugIds(poolIds, count, 'quiz');
 }
 
 export function generateMistakeQuestions(mistakes: MistakeBankEntry[], maxCount: number = 10): QuizQuestion[] {
@@ -1185,9 +1186,18 @@ export function generateMistakeReviewQuestions(drugIds: string[], count: number 
   return generateQuestionsFromDrugIds(drugIds, count, 'review');
 }
 
-export function generateSpacedRepetitionQuestions(dueDrugIds: string[], lowMasteryDrugIds: string[], count: number = 10): QuizQuestion[] {
+export function generateSpacedRepetitionQuestions(
+  dueDrugIds: string[],
+  lowMasteryDrugIds: string[],
+  count: number = 10,
+  poolDrugIds?: string[]
+): QuizQuestion[] {
+  const poolIds = poolDrugIds && poolDrugIds.length > 0 ? unique(poolDrugIds) : drugs.map((d) => d.id);
+  const poolSet = new Set(poolIds);
+
   const used = new Set<string>();
-  const pickOrder = unique([...dueDrugIds, ...lowMasteryDrugIds]).filter((id) => id);
+  const pickOrder = unique([...dueDrugIds, ...lowMasteryDrugIds])
+    .filter((id) => id && poolSet.has(id));
 
   const selected: string[] = [];
   for (const id of pickOrder) {
@@ -1197,7 +1207,7 @@ export function generateSpacedRepetitionQuestions(dueDrugIds: string[], lowMaste
   }
 
   if (selected.length < count) {
-    const remaining = shuffleArray(drugs.map((d) => d.id).filter((id) => !used.has(id)));
+    const remaining = shuffleArray(poolIds.filter((id) => !used.has(id)));
     selected.push(...remaining.slice(0, count - selected.length));
   }
 

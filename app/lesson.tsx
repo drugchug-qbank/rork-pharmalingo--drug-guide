@@ -136,7 +136,7 @@ export default function LessonScreen() {
         return generateMistakeQuestions(parsed, 10);
       } catch (e) {
         console.log('[Lesson] Failed to parse mistakes JSON', e);
-        return generatePracticeQuestions(10);
+        return generatePracticeQuestions(10, getUnlockedLessonDrugIds());
       }
     }
     if (mode === 'mistakes-review' && mistakesDrugIdsParam) {
@@ -146,20 +146,39 @@ export default function LessonScreen() {
         return generateMistakeReviewQuestions(drugIds, 10);
       } catch (e) {
         console.log('[Lesson] Failed to parse mistake drug IDs', e);
-        return generatePracticeQuestions(10);
+        return generatePracticeQuestions(10, getUnlockedLessonDrugIds());
       }
     }
     if (isSpaced) {
-      const due = getDueForReviewDrugIds();
-      const low = getLowMasteryDrugIds();
-      return generateSpacedRepetitionQuestions(due, low, 10);
+      const unlocked = getUnlockedLessonDrugIds();
+      const unlockedSet = new Set(unlocked);
+      const due = getDueForReviewDrugIds().filter((id) => unlockedSet.has(id));
+      const low = getLowMasteryDrugIds().filter((id) => unlockedSet.has(id));
+      return generateSpacedRepetitionQuestions(due, low, 10, unlocked);
     }
     if (isBrandBlitz) {
       const unlocked = getUnlockedLessonDrugIds();
       return generateBrandBlitzQuestions(unlocked, 15);
     }
     if (mode === 'practice') {
-      return generatePracticeQuestions(10);
+      const unlocked = Array.from(new Set(getUnlockedLessonDrugIds()));
+      if (unlocked.length === 0) return generatePracticeQuestions(10);
+
+      // Adaptive practice: prioritize what's due + low mastery, then fill from unlocked pool.
+      const unlockedSet = new Set(unlocked);
+      const due = getDueForReviewDrugIds().filter((id) => unlockedSet.has(id));
+      const low = getLowMasteryDrugIds().filter((id) => unlockedSet.has(id));
+
+      const priority = Array.from(new Set([...due, ...low]));
+      const remaining = unlocked.filter((id) => !priority.includes(id));
+      const shuffledRemaining = [...remaining].sort(() => Math.random() - 0.5);
+
+      const selected = [...priority.slice(0, 10)];
+      if (selected.length < 10) {
+        selected.push(...shuffledRemaining.slice(0, 10 - selected.length));
+      }
+
+      return generatePracticeQuestions(10, selected.length > 0 ? selected : unlocked);
     }
     if (isEndgame) {
       return generateEndGameQuestions(15);
@@ -341,11 +360,17 @@ export default function LessonScreen() {
     ]).start();
   }, [currentIndex, fadeAnim, slideAnim, mascotMessageFade, getRandomMessage]);
 
-  const handleMatchingComplete = useCallback((allCorrectFirstTry: boolean, correct: number, total: number) => {
+  const handleMatchingComplete = useCallback((
+    allCorrectFirstTry: boolean,
+    correct: number,
+    total: number,
+    drugFirstTryMap?: Record<string, boolean>
+  ) => {
     if (!currentQuestion || currentQuestion.type !== 'matching') return;
     const matchPairs = currentQuestion.matchPairs ?? [];
     matchPairs.forEach(p => {
-      updateDrugMastery(p.drugId, allCorrectFirstTry);
+      const correctForThisDrug = drugFirstTryMap ? !!drugFirstTryMap[p.drugId] : allCorrectFirstTry;
+      updateDrugMastery(p.drugId, correctForThisDrug);
     });
 
     if (currentQuestion.conceptId) {
@@ -366,7 +391,8 @@ export default function LessonScreen() {
       setMascotMessage(getRandomMessage(MASCOT_MESSAGES_CORRECT));
       if (isMistakesMode) {
         matchPairs.forEach(p => {
-          removeMistakesByDrug(p.drugId, 'matching');
+          const ok = drugFirstTryMap ? !!drugFirstTryMap[p.drugId] : true;
+          if (ok) removeMistakesByDrug(p.drugId, 'matching');
         });
       }
     } else {
@@ -376,14 +402,17 @@ export default function LessonScreen() {
       setMascotMood('sad');
       setMascotMessage(getRandomMessage(MASCOT_MESSAGES_INCORRECT));
       if (!isMistakesMode && currentQuestion.phase !== 'intro') {
-        matchPairs.forEach(p => {
-          setSessionMistakes(prev => [...prev, {
+        const entries = matchPairs
+          .filter(p => (drugFirstTryMap ? !drugFirstTryMap[p.drugId] : true))
+          .map(p => ({
             drugId: p.drugId,
-            questionType: 'matching',
+            questionType: 'matching' as const,
             dateISO: new Date().toISOString(),
             lessonId: activeLessonIdForMistakes,
-          }]);
-        });
+          }));
+        if (entries.length > 0) {
+          setSessionMistakes(prev => [...prev, ...entries]);
+        }
       }
       if (!isPractice && currentQuestion.phase !== 'intro') {
         loseHeart();
