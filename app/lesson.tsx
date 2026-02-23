@@ -13,6 +13,7 @@ import {
   generateQuestionsForLesson,
   generateQuestionsFromDrugIds,
   generatePracticeQuestions,
+  generateBrandBlitzQuestions,
   generateSpacedRepetitionQuestions,
   generateMistakeQuestions,
   generateMistakeReviewQuestions,
@@ -86,6 +87,7 @@ export default function LessonScreen() {
     hasSeenTeachingSlides,
     markTeachingSlidesSeen,
     getUnlockedDrugIds,
+    getUnlockedLessonDrugIds,
     getDueForReviewDrugIds,
     getLowMasteryDrugIds,
     getLessonStars,
@@ -93,10 +95,18 @@ export default function LessonScreen() {
     removeMistakesByDrug,
     trackPracticeQuest,
     trackComboQuest,
+    recordStreakActivity,
   } = useProgress();
   const { logXpEvent } = useXpSync();
 
-  const isPractice = mode === 'practice' || mode === 'spaced' || mode === 'mistakes' || mode === 'mistakes-review';
+  const isBrandBlitz = mode === 'brand-blitz';
+  const rewardsDisabled = isBrandBlitz;
+  const isPractice =
+    mode === 'practice' ||
+    mode === 'spaced' ||
+    mode === 'mistakes' ||
+    mode === 'mistakes-review' ||
+    isBrandBlitz;
   const isSpaced = mode === 'spaced';
   const isEndgame = mode === 'endgame';
 
@@ -143,6 +153,10 @@ export default function LessonScreen() {
       const due = getDueForReviewDrugIds();
       const low = getLowMasteryDrugIds();
       return generateSpacedRepetitionQuestions(due, low, 10);
+    }
+    if (isBrandBlitz) {
+      const unlocked = getUnlockedLessonDrugIds();
+      return generateBrandBlitzQuestions(unlocked, 15);
     }
     if (mode === 'practice') {
       return generatePracticeQuestions(10);
@@ -270,7 +284,7 @@ export default function LessonScreen() {
   }, []);
 
   const handleComboMilestone = useCallback((newCombo: number) => {
-    if (newCombo === 5) {
+    if (!rewardsDisabled && newCombo === 5) {
       const amt = 5 * rewardMultiplier;
       addCoins(amt, `Combo 5 bonus${rewardMultiplier > 1 ? ' (2×)' : ''}`);
       setComboBonusCoins(prev => prev + amt);
@@ -279,7 +293,7 @@ export default function LessonScreen() {
         Animated.timing(comboScaleAnim, { toValue: 1.6, duration: 150, useNativeDriver: true }),
         Animated.spring(comboScaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
       ]).start();
-    } else if (newCombo === 10) {
+    } else if (!rewardsDisabled && newCombo === 10) {
       const amt = 10 * rewardMultiplier;
       addCoins(amt, `Combo 10 bonus${rewardMultiplier > 1 ? ' (2×)' : ''}`);
       setComboBonusCoins(prev => prev + amt);
@@ -297,7 +311,7 @@ export default function LessonScreen() {
     if (newCombo >= 1) {
       comboOpacityAnim.setValue(1);
     }
-  }, [addCoins, comboScaleAnim, comboOpacityAnim, rewardMultiplier]);
+  }, [addCoins, comboScaleAnim, comboOpacityAnim, rewardMultiplier, rewardsDisabled]);
 
 
 
@@ -666,18 +680,25 @@ export default function LessonScreen() {
   const handleNext = useCallback(() => {
     if (currentIndex + 1 >= totalQuestions) {
       const perfect = correctCount === totalQuestions;
-      const baseXp = Math.min(99, Math.round((correctCount * 6 + (perfect ? 20 : 0))));
+      const scorePercent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+
+      const baseXp = rewardsDisabled ? 0 : Math.min(99, Math.round((correctCount * 6 + (perfect ? 20 : 0))));
       const earnedXp = baseXp * rewardMultiplier;
-      const coinsEarned = Math.floor(earnedXp / 3);
-      const perfectBonusCoins = perfect ? Math.floor(50 / 3) * rewardMultiplier : 0;
+      const coinsEarned = rewardsDisabled ? 0 : Math.floor(earnedXp / 3);
+      const perfectBonusCoins = rewardsDisabled ? 0 : (perfect ? Math.floor(50 / 3) * rewardMultiplier : 0);
 
       const prevStreak = progress.stats.streakCurrent;
       const lastActive = progress.stats.lastActiveDateISO;
       const todayISO = new Date().toISOString().slice(0, 10);
       const lastActiveDay = lastActive ? lastActive.slice(0, 10) : '';
 
+      const alreadyActiveToday = lastActiveDay === todayISO;
+      const streakEligible = !isBrandBlitz || alreadyActiveToday || scorePercent >= 70;
+
       let streakStatus = 'new';
-      if (lastActiveDay === todayISO) {
+      if (!streakEligible) {
+        streakStatus = 'not-counted';
+      } else if (alreadyActiveToday) {
         streakStatus = 'kept';
       } else {
         const lastDate = new Date(lastActive);
@@ -694,12 +715,13 @@ export default function LessonScreen() {
         ? prevStreak + 1
         : streakStatus === 'kept'
           ? prevStreak
-          : 1;
+          : streakStatus === 'not-counted'
+            ? prevStreak
+            : 1;
 
       const completionLessonId = mode === 'mastery' && chapterId ? `mastery-${chapterId}` : partId;
 
       // ⭐ Star-earned toast (purely visual) — only for subsection quizzes (not mastery/endgame/practice)
-      const scorePercent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
       const eligibleForStars =
         !!partId && !isPractice && !isEndgame && mode !== 'mastery' && (chapterId ?? '') !== 'mod-11';
       const prevStarsForPart = eligibleForStars ? (progress.lessonStars?.[partId] ?? 0) : 0;
@@ -716,9 +738,13 @@ export default function LessonScreen() {
         const xpToSync = Math.max(0, Math.round(earnedXp));
         console.log('[XpSync] sending xpToSync=', xpToSync, 'earnedXp=', earnedXp);
         logXpEvent(xpToSync, 'practice_complete');
+      } else if (isBrandBlitz && scorePercent >= 70) {
+        // Brand Blitz: 0 XP/coins, but counts toward streak if the user scores ≥70%
+        recordStreakActivity();
+        logXpEvent(0, 'brand_blitz_complete');
       }
 
-      if (highestCombo >= 5) {
+      if (!rewardsDisabled && highestCombo >= 5) {
         trackComboQuest(highestCombo);
       }
 
@@ -742,6 +768,7 @@ export default function LessonScreen() {
           chapterId: chapterId ?? '',
           partId: partId ?? '',
           isPractice: String(isPractice),
+          rewardsDisabled: String(rewardsDisabled),
           starEarned: String(starEarned),
           newStars: String(nextStarsForPart),
           prevStars: String(prevStarsForPart),
@@ -770,6 +797,8 @@ export default function LessonScreen() {
     chapterId,
     mode,
     isEndgame,
+    isBrandBlitz,
+    rewardsDisabled,
     rewardMultiplier,
     correctCount,
     completeLesson,
@@ -782,6 +811,7 @@ export default function LessonScreen() {
     logXpEvent,
     trackPracticeQuest,
     trackComboQuest,
+    recordStreakActivity,
     isMistakesMode,
     addMistakes,
     sessionMistakes,

@@ -1,9 +1,9 @@
 import React, { useCallback, useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Dumbbell, Shuffle, Target, Clock, Zap, TrendingUp, Brain, AlertCircle, RotateCcw } from 'lucide-react-native';
+import { Dumbbell, Shuffle, Target, Clock, Zap, TrendingUp, Brain, AlertCircle, RotateCcw, Flame } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useProgress } from '@/contexts/ProgressContext';
 import { chapters } from '@/constants/chapters';
@@ -14,7 +14,18 @@ import DrugMasteryCard from '@/components/DrugMasteryCard';
 export default function PracticeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { progress, accuracy, totalLessonsCompleted, getChapterProgress, getDueForReviewCount, getDueForReviewDrugIds, getLowMasteryDrugIds, getRecentMistakes, getRecentMistakeDrugIds } = useProgress();
+  const {
+    progress,
+    accuracy,
+    totalLessonsCompleted,
+    getChapterProgress,
+    getDueForReviewCount,
+    getDueForReviewDrugIds,
+    getLowMasteryDrugIds,
+    getRecentMistakes,
+    getRecentMistakeDrugIds,
+    getUnlockedLessonDrugIds,
+  } = useProgress();
   const [showOutOfHearts, setShowOutOfHearts] = useState<boolean>(false);
 
   const dueCount = getDueForReviewCount();
@@ -45,6 +56,23 @@ export default function PracticeScreen() {
       params: { mode: 'practice' },
     });
   }, [router]);
+
+  const startBrandBlitz = useCallback(() => {
+    const unlocked = getUnlockedLessonDrugIds();
+    if (!unlocked || unlocked.length === 0) {
+      Alert.alert(
+        'Brand Blitz locked',
+        'Complete at least one lesson on the Learn tab to unlock Brand Blitz.',
+        [{ text: 'OK', style: 'default' }]
+      );
+      return;
+    }
+
+    router.push({
+      pathname: '/lesson',
+      params: { mode: 'brand-blitz' },
+    });
+  }, [router, getUnlockedLessonDrugIds]);
 
   const startSpacedPractice = useCallback(() => {
     router.push({
@@ -124,6 +152,27 @@ export default function PracticeScreen() {
             </View>
             <View style={styles.playCircle}>
               <Dumbbell size={20} color={Colors.primary} />
+            </View>
+          </LinearGradient>
+        </Pressable>
+
+        <Pressable onPress={startBrandBlitz} style={styles.brandBlitzCard} testID="brand-blitz">
+          <LinearGradient
+            colors={[Colors.chapterColors[2], Colors.chapterColors[4]]}
+            style={styles.quickPracticeGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.quickPracticeIcon}>
+              <Zap size={28} color="#FFFFFF" />
+            </View>
+            <View style={styles.quickPracticeText}>
+              <Text style={styles.quickPracticeTitle}>Brand Blitz Quiz ⚡️</Text>
+              <Text style={styles.quickPracticeDesc}>15 brand ↔ generic • 70%+ saves streak</Text>
+            </View>
+            <View style={styles.blitzPill}>
+              <Flame size={16} color="#FFFFFF" />
+              <Text style={styles.blitzPillText}>70%+</Text>
             </View>
           </LinearGradient>
         </Pressable>
@@ -327,6 +376,16 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 6,
   },
+  brandBlitzCard: {
+    borderRadius: 22,
+    overflow: 'hidden',
+    marginBottom: 18,
+    shadowColor: Colors.chapterColors[2],
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 6,
+  },
   quickPracticeGradient: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -362,6 +421,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  blitzPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  blitzPillText: {
+    fontSize: 14,
+    fontWeight: '900' as const,
+    color: '#FFFFFF',
   },
   statsRow: {
     flexDirection: 'row',
