@@ -88,6 +88,7 @@ export default function LessonScreen() {
     getUnlockedDrugIds,
     getDueForReviewDrugIds,
     getLowMasteryDrugIds,
+    getLessonStars,
     addMistakes,
     removeMistakesByDrug,
     trackPracticeQuest,
@@ -176,7 +177,8 @@ export default function LessonScreen() {
       reviewCount = Math.min(reviewCount, reviewPool.length);
 
       const quizCount = Math.max(0, targetPartQuestions - introCount);
-      const quizQuestions = generateQuestionsForLesson(part.drugIds, quizCount, 'quiz');
+      const stars = getLessonStars(part.id);
+      const quizQuestions = generateQuestionsForLesson(part.drugIds, quizCount, 'quiz', stars);
       const reviewDrugIds = reviewCount > 0 ? reviewPool.sort(() => Math.random() - 0.5).slice(0, reviewCount) : [];
       const reviewQuestions =
         reviewCount > 0 ? generateQuestionsFromDrugIds(reviewDrugIds, reviewCount, 'review') : [];
@@ -696,6 +698,14 @@ export default function LessonScreen() {
 
       const completionLessonId = mode === 'mastery' && chapterId ? `mastery-${chapterId}` : partId;
 
+      // ⭐ Star-earned toast (purely visual) — only for subsection quizzes (not mastery/endgame/practice)
+      const scorePercent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
+      const eligibleForStars =
+        !!partId && !isPractice && !isEndgame && mode !== 'mastery' && (chapterId ?? '') !== 'mod-11';
+      const prevStarsForPart = eligibleForStars ? (progress.lessonStars?.[partId] ?? 0) : 0;
+      const starEarned = eligibleForStars && scorePercent >= 70 && prevStarsForPart < 3;
+      const nextStarsForPart = starEarned ? Math.min(3, prevStarsForPart + 1) : prevStarsForPart;
+
       if (!isPractice && completionLessonId) {
         completeLesson(completionLessonId, earnedXp, correctCount, totalQuestions, highestCombo);
         const xpToSync = Math.max(0, Math.round(earnedXp));
@@ -732,6 +742,9 @@ export default function LessonScreen() {
           chapterId: chapterId ?? '',
           partId: partId ?? '',
           isPractice: String(isPractice),
+          starEarned: String(starEarned),
+          newStars: String(nextStarsForPart),
+          prevStars: String(prevStarsForPart),
           perfectBonus: String(perfectBonusCoins),
           highestCombo: String(highestCombo),
           comboBonusCoins: String(comboBonusCoins),
@@ -763,6 +776,7 @@ export default function LessonScreen() {
     resultSlide,
     router,
     progress.stats,
+    progress.lessonStars,
     highestCombo,
     comboBonusCoins,
     logXpEvent,
