@@ -765,12 +765,67 @@ function clinicalPearl(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): Quiz
 }
 
 function trueFalse(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
-  // Keep it simple: randomize whether statement is true or false.
+  // More variety than just brand↔generic while staying unambiguous.
   const isTrue = Math.random() < 0.5;
-  const other = drugs.find((d) => d.id !== drug.id) ?? drug;
-  const statement = isTrue
-    ? `${drug.brandName} is the brand name for ${drug.genericName}.`
-    : `${drug.brandName} is the brand name for ${other.genericName}.`;
+
+  const allIndications = unique(drugs.flatMap((d) => d.indications ?? []));
+  const allSideEffects = unique(drugs.flatMap((d) => d.sideEffects ?? []));
+  const allClasses = unique(drugs.map((d) => d.drugClass));
+
+  const suf = genericSuffix(drug.genericName);
+  const hasSuffixPearl = !!(suf && SUFFIX_TO_CLASS[suf]);
+
+  const variants = hasSuffixPearl
+    ? (['brand_generic', 'class', 'indication', 'side_effect', 'suffix'] as const)
+    : (['brand_generic', 'class', 'indication', 'side_effect'] as const);
+
+  const variant = sampleOne([...variants]);
+
+  let statement = '';
+  let explanation = '';
+
+  if (variant === 'brand_generic') {
+    const other = drugs.find((d) => d.id !== drug.id) ?? drug;
+    statement = isTrue
+      ? `${drug.brandName} is the brand name for ${drug.genericName}.`
+      : `${drug.brandName} is the brand name for ${other.genericName}.`;
+    explanation = `${drug.brandName} ↔ ${drug.genericName}.`;
+  } else if (variant === 'class') {
+    const otherClass =
+      sampleOne(allClasses.filter((c) => optionKey(c) !== optionKey(drug.drugClass))) ?? drug.drugClass;
+    statement = isTrue ? `${drug.genericName} is a ${drug.drugClass}.` : `${drug.genericName} is a ${otherClass}.`;
+    explanation = `${drug.genericName} belongs to the class: ${drug.drugClass}.`;
+  } else if (variant === 'indication') {
+    const inds = unique(drug.indications ?? []);
+    const trueInd = inds.length ? sampleOne(inds) : 'Hypertension';
+    const falseInd =
+      sampleOne(allIndications.filter((i) => !inds.some((x) => optionKey(x) === optionKey(i)))) ?? 'Hypertension';
+
+    statement = isTrue
+      ? `${drug.genericName} is commonly used for ${trueInd}.`
+      : `${drug.genericName} is commonly used for ${falseInd}.`;
+    explanation = `Common uses for ${drug.genericName}: ${inds.slice(0, 3).join(', ') || 'see lesson notes'}.`;
+  } else if (variant === 'side_effect') {
+    const ses = unique(drug.sideEffects ?? []);
+    const trueSe = ses.length ? sampleOne(ses) : 'Dizziness';
+    const falseSe =
+      sampleOne(allSideEffects.filter((s) => !ses.some((x) => optionKey(x) === optionKey(s)))) ?? 'Dizziness';
+
+    statement = isTrue
+      ? `${trueSe} is a common side effect of ${drug.genericName}.`
+      : `${falseSe} is a common side effect of ${drug.genericName}.`;
+    explanation = `Typical side effects for ${drug.genericName}: ${ses.slice(0, 3).join(', ') || 'see lesson notes'}.`;
+  } else if (variant === 'suffix') {
+    const correctClass = suf && SUFFIX_TO_CLASS[suf] ? SUFFIX_TO_CLASS[suf] : 'Drug class pattern';
+    const wrongClass =
+      sampleOne(unique(Object.values(SUFFIX_TO_CLASS)).filter((c) => optionKey(c) !== optionKey(correctClass))) ??
+      'Drug class pattern';
+
+    statement = isTrue
+      ? `${drug.genericName} ends in "-${suf}", which often indicates a ${correctClass}.`
+      : `${drug.genericName} ends in "-${suf}", which often indicates a ${wrongClass}.`;
+    explanation = `High-yield naming pattern: -${suf} → ${correctClass}.`;
+  }
 
   return withPhase(
     {
@@ -780,51 +835,71 @@ function trueFalse(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQues
       correctAnswer: isTrue ? 'True' : 'False',
       options: ['True', 'False'],
       drugId: drug.id,
-      explanation: `${drug.brandName} ↔ ${drug.genericName}.`,
+      explanation,
     },
     phase
   );
 }
 
 function multiSelectIndications(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
-  const inds = unique(drug.indications ?? []).slice(0, 2);
-  if (inds.length === 0) {
+  const allTrue = unique(drug.indications ?? []);
+  // If the drug only has 0–1 listed indication, a single-answer question is cleaner.
+  if (allTrue.length < 2) {
     return indicationPrimary(drug, pool, phase);
   }
+
+  // Pick 2–3 correct answers (never include other true indications as distractors).
+  const correctCount = Math.min(allTrue.length, Math.random() < 0.5 ? 2 : 3);
+  const correctAnswers = shuffleArray(allTrue).slice(0, correctCount);
+
   const all = unique(drugs.flatMap((d) => d.indications ?? []));
-  const distractors = shuffleArray(all.filter((x) => !inds.includes(x))).slice(0, 2);
-  const options = shuffleArray(unique([...inds, ...distractors]));
+  const distractorPool = dedupeOptions(all).filter((x) => !allTrue.some((t) => optionKey(t) === optionKey(x)));
+  const distractorCount = Math.max(2, 5 - correctCount); // aim for ~5 options total
+  const distractors = shuffleArray(distractorPool).slice(0, distractorCount);
+
+  const options = shuffleArray(dedupeOptions([...correctAnswers, ...distractors])).slice(0, 6);
+
   return withPhase(
     {
       id: uid('q-ms-ind', drug.id),
       type: 'multi_select',
       question: `Select ALL typical indications for ${drug.genericName}:`,
-      correctAnswers: inds,
+      correctAnswers,
       options,
       drugId: drug.id,
-      explanation: `Indications: ${unique(drug.indications ?? []).join(', ') || '—'}.`,
+      explanation: `Indications: ${allTrue.join(', ') || '—'}.`,
     },
     phase
   );
 }
 
 function multiSelectSideEffects(drug: Drug, pool: Drug[], phase: QuizQuestionPhase): QuizQuestion {
-  const ses = unique(drug.sideEffects ?? []).slice(0, 2);
-  if (ses.length === 0) {
+  const allTrue = unique(drug.sideEffects ?? []);
+  // If the drug only has 0–1 listed side effect, a single-answer question is cleaner.
+  if (allTrue.length < 2) {
     return sideEffectCommon(drug, pool, phase);
   }
+
+  // Pick 2–3 correct answers (never include other true side effects as distractors).
+  const correctCount = Math.min(allTrue.length, Math.random() < 0.5 ? 2 : 3);
+  const correctAnswers = shuffleArray(allTrue).slice(0, correctCount);
+
   const all = unique(drugs.flatMap((d) => d.sideEffects ?? []));
-  const distractors = shuffleArray(all.filter((x) => !ses.includes(x))).slice(0, 2);
-  const options = shuffleArray(unique([...ses, ...distractors]));
+  const distractorPool = dedupeOptions(all).filter((x) => !allTrue.some((t) => optionKey(t) === optionKey(x)));
+  const distractorCount = Math.max(2, 5 - correctCount); // aim for ~5 options total
+  const distractors = shuffleArray(distractorPool).slice(0, distractorCount);
+
+  const options = shuffleArray(dedupeOptions([...correctAnswers, ...distractors])).slice(0, 6);
+
   return withPhase(
     {
       id: uid('q-ms-se', drug.id),
       type: 'multi_select',
       question: `Select ALL common side effects of ${drug.genericName}:`,
-      correctAnswers: ses,
+      correctAnswers,
       options,
       drugId: drug.id,
-      explanation: `Side effects: ${unique(drug.sideEffects ?? []).join(', ') || '—'}.`,
+      explanation: `Side effects: ${allTrue.join(', ') || '—'}.`,
     },
     phase
   );
@@ -873,65 +948,199 @@ const GENERATORS: Array<(drug: Drug, pool: Drug[], phase: QuizQuestionPhase) => 
   classComparison,
 ];
 
-function generateQuestion(drug: Drug, pool: Drug[], phase: QuizQuestionPhase, i: number): QuizQuestion {
-  // Bias towards variety: mostly cycle through generators, but occasionally random.
-  const useRandom = Math.random() < 0.3;
-  const gen = useRandom ? sampleOne(GENERATORS) : GENERATORS[i % GENERATORS.length];
-  return gen(drug, pool, phase);
+
+type GeneratorFn = (drug: Drug, pool: Drug[], phase: QuizQuestionPhase) => QuizQuestion;
+
+const BRAND_GENERIC_GENERATORS: GeneratorFn[] = [
+  brandToGeneric,
+  genericToBrand,
+  clozeBrandToGeneric,
+  clozeGenericToBrand,
+];
+
+const TRUE_FALSE_GENERATORS: GeneratorFn[] = [trueFalse];
+
+const MULTI_SELECT_GENERATORS: GeneratorFn[] = [multiSelectIndications, multiSelectSideEffects];
+
+const NOT_GENERATORS: GeneratorFn[] = [notIndication, notSideEffect];
+
+const PEARL_GENERATORS: GeneratorFn[] = [clinicalPearl, keyFactToDrug, classComparison];
+
+const CORE_FILL_GENERATORS: GeneratorFn[] = [suffixQuestion, dosingQuestion, clozeQuestion, keyFactToDrug, classComparison];
+
+function clampStars(stars: number): 0 | 1 | 2 | 3 {
+  if (stars <= 0) return 0;
+  if (stars === 1) return 1;
+  if (stars === 2) return 2;
+  return 3;
 }
 
-export function generateQuestionsForLesson(drugIds: string[], count: number, phase: QuizQuestionPhase = 'quiz'): QuizQuestion[] {
+function buildGeneratorQueue(count: number, stars: number): GeneratorFn[] {
+  const s = clampStars(stars);
+  const queue: GeneratorFn[] = [];
+  if (count <= 0) return queue;
+
+  // Baseline: always reinforce the essentials
+  queue.push(sampleOne(BRAND_GENERIC_GENERATORS));
+  if (count === 1) return queue;
+
+  queue.push(indicationPrimary);
+  if (count === 2) return queue;
+
+  queue.push(sideEffectCommon);
+  if (count === 3) return queue;
+
+  queue.push(drugClassQuestion);
+  if (count === 4) return queue;
+
+  // Desired quotas (total counts, not "additional")
+  let desiredBrand = s === 0 ? 4 : s === 1 ? 4 : s === 2 ? 3 : 2;
+  let desiredTF = s <= 1 ? 2 : 1;
+  let desiredMulti = s === 0 ? 0 : s === 1 ? 1 : s === 2 ? 2 : 3;
+  let desiredNot = s <= 1 ? 0 : s === 2 ? 1 : 2;
+  let desiredPearl = s <= 1 ? 0 : 1;
+
+  // Baseline already includes 1 brand question
+  let addBrand = Math.max(0, desiredBrand - 1);
+
+  // Baseline already uses 4 slots
+  let planned = 4 + addBrand + desiredTF + desiredMulti + desiredNot + desiredPearl;
+
+  // If planned exceeds count, reduce harder buckets first (keeps essentials)
+  while (planned > count) {
+    if (desiredNot > 0) {
+      desiredNot -= 1;
+    } else if (desiredPearl > 0) {
+      desiredPearl -= 1;
+    } else if (desiredMulti > 0) {
+      desiredMulti -= 1;
+    } else if (desiredTF > 1) {
+      desiredTF -= 1;
+    } else if (addBrand > 0) {
+      addBrand -= 1;
+    } else {
+      break;
+    }
+    planned = 4 + addBrand + desiredTF + desiredMulti + desiredNot + desiredPearl;
+  }
+
+  // Add quota-based items
+  for (let i = 0; i < addBrand && queue.length < count; i++) queue.push(sampleOne(BRAND_GENERIC_GENERATORS));
+  for (let i = 0; i < desiredTF && queue.length < count; i++) queue.push(sampleOne(TRUE_FALSE_GENERATORS));
+  for (let i = 0; i < desiredMulti && queue.length < count; i++) queue.push(sampleOne(MULTI_SELECT_GENERATORS));
+  for (let i = 0; i < desiredNot && queue.length < count; i++) queue.push(sampleOne(NOT_GENERATORS));
+  for (let i = 0; i < desiredPearl && queue.length < count; i++) queue.push(sampleOne(PEARL_GENERATORS));
+
+  // Fill remainder with a star-appropriate mix
+  while (queue.length < count) {
+    if (s <= 1) {
+      // Early mastery: heavy on brand/generic + quick checks, with some variety
+      const roll = Math.random();
+      if (roll < 0.45) queue.push(sampleOne(BRAND_GENERIC_GENERATORS));
+      else if (roll < 0.65) queue.push(sampleOne(TRUE_FALSE_GENERATORS));
+      else queue.push(sampleOne(CORE_FILL_GENERATORS));
+    } else {
+      // Higher mastery: more complex decision-making, still keep a few core reps
+      const roll = Math.random();
+      if (roll < 0.4) queue.push(sampleOne(MULTI_SELECT_GENERATORS));
+      else if (roll < 0.55) queue.push(sampleOne(NOT_GENERATORS));
+      else if (roll < 0.7) queue.push(sampleOne(PEARL_GENERATORS));
+      else if (roll < 0.85) queue.push(sampleOne(BRAND_GENERIC_GENERATORS));
+      else queue.push(sampleOne(CORE_FILL_GENERATORS));
+    }
+  }
+
+  return shuffleArray(queue).slice(0, count);
+}
+
+function starsForPhase(phase: QuizQuestionPhase, provided: number): number {
+  if (phase === 'mastery') return 3;
+  if (phase === 'review') return Math.min(2, Math.max(0, provided)); // keep review medium
+  return Math.max(0, provided);
+}
+
+/**
+ * Generates questions for a specific subsection lesson.
+ * `masteryStars` controls the difficulty mix (0–3).
+ */
+export function generateQuestionsForLesson(
+  drugIds: string[],
+  count: number,
+  phase: QuizQuestionPhase = 'quiz',
+  masteryStars: number = 0
+): QuizQuestion[] {
   const lessonDrugs = getDrugsByIds(drugIds);
   if (lessonDrugs.length === 0 || count <= 0) return [];
+
+  const stars = starsForPhase(phase, masteryStars);
 
   const questions: QuizQuestion[] = [];
   const shuffledDrugs = shuffleArray(lessonDrugs);
 
-  // Add one matching question in the middle when possible.
-  const addMatchingAt = lessonDrugs.length >= 4 && count >= 8 ? Math.floor(count / 2) : -1;
-  let matchingAdded = false;
+  // Matching is best early (stars 0–1). It’s a great brand↔generic drill.
+  const shouldAddMatching = lessonDrugs.length >= 4 && count >= 8 && stars <= 1;
+  const effectiveCount = shouldAddMatching ? Math.max(1, count - 1) : count;
 
-  for (let i = 0; i < count; i++) {
-    if (!matchingAdded && addMatchingAt === i) {
-      const matchQ = generateMatchingQuestion(lessonDrugs, phase);
-      if (matchQ) {
-        questions.push(matchQ);
-        matchingAdded = true;
-        continue;
-      }
-    }
+  const genQueue = buildGeneratorQueue(effectiveCount, stars);
+
+  for (let i = 0; i < effectiveCount; i++) {
     const drug = shuffledDrugs[i % shuffledDrugs.length];
-    questions.push(generateQuestion(drug, lessonDrugs, phase, i));
+    const gen = genQueue[i] ?? sampleOne(GENERATORS);
+    questions.push(gen(drug, lessonDrugs, phase));
+  }
+
+  if (shouldAddMatching) {
+    const matchQ = generateMatchingQuestion(lessonDrugs, phase);
+    if (matchQ) questions.push(matchQ);
+    else {
+      const drug = shuffledDrugs[effectiveCount % shuffledDrugs.length];
+      questions.push(sampleOne(GENERATORS)(drug, lessonDrugs, phase));
+    }
   }
 
   // Keep intro questions in order (caller can prepend). For quiz/review/mastery, shuffle is good.
-  return phase === 'intro' ? questions : shuffleArray(questions);
+  return phase === 'intro' ? questions.slice(0, count) : shuffleArray(questions).slice(0, count);
 }
 
-export function generateQuestionsFromDrugIds(drugIds: string[], count: number, phase: QuizQuestionPhase = 'review'): QuizQuestion[] {
+export function generateQuestionsFromDrugIds(
+  drugIds: string[],
+  count: number,
+  phase: QuizQuestionPhase = 'review'
+): QuizQuestion[] {
   const pool = drugs.filter((d) => drugIds.includes(d.id));
   if (pool.length === 0 || count <= 0) return [];
   const shuffled = shuffleArray(pool);
 
-  const questions: QuizQuestion[] = [];
-  const addMatchingAt = pool.length >= 4 && count >= 10 ? Math.floor(count / 3) : -1;
-  let matchingAdded = false;
+  // For non-subsection pools we don't know stars, so pick a sensible default:
+  // - mastery quizzes = hard mix
+  // - review pools = medium mix
+  // - practice/quiz pools = easier mix
+  const stars = phase === 'mastery' ? 3 : phase === 'review' ? 1 : 0;
 
-  for (let i = 0; i < count; i++) {
-    if (!matchingAdded && addMatchingAt === i) {
-      const matchQ = generateMatchingQuestion(pool, phase);
-      if (matchQ) {
-        questions.push(matchQ);
-        matchingAdded = true;
-        continue;
-      }
-    }
+  const shouldAddMatching = pool.length >= 4 && count >= 10 && stars <= 1;
+  const effectiveCount = shouldAddMatching ? Math.max(1, count - 1) : count;
+
+  const genQueue = buildGeneratorQueue(effectiveCount, stars);
+
+  const questions: QuizQuestion[] = [];
+  for (let i = 0; i < effectiveCount; i++) {
     const drug = shuffled[i % shuffled.length];
-    questions.push(generateQuestion(drug, pool, phase, i));
+    const gen = genQueue[i] ?? sampleOne(GENERATORS);
+    questions.push(gen(drug, pool, phase));
   }
 
-  return shuffleArray(questions);
+  if (shouldAddMatching) {
+    const matchQ = generateMatchingQuestion(pool, phase);
+    if (matchQ) questions.push(matchQ);
+    else {
+      const drug = shuffled[effectiveCount % shuffled.length];
+      questions.push(sampleOne(GENERATORS)(drug, pool, phase));
+    }
+  }
+
+  return shuffleArray(questions).slice(0, count);
 }
+
 
 export function generatePracticeQuestions(count: number = 10): QuizQuestion[] {
   return generateQuestionsFromDrugIds(drugs.map((d) => d.id), count, 'quiz');

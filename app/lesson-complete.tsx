@@ -101,6 +101,9 @@ export default function LessonCompleteScreen() {
     comboBonusCoins?: string;
     mistakesJson?: string;
     isMistakesMode?: string;
+    starEarned?: string;
+    newStars?: string;
+    prevStars?: string;
   }>();
 
   const router = useRouter();
@@ -121,6 +124,9 @@ export default function LessonCompleteScreen() {
   const isPractice = params.isPractice === 'true';
   const highestCombo = parseInt(params.highestCombo ?? '0', 10);
   const comboBonusCoins = parseInt(params.comboBonusCoins ?? '0', 10);
+  const starEarned = params.starEarned === 'true';
+  const newStars = parseInt(params.newStars ?? '0', 10);
+  const prevStars = parseInt(params.prevStars ?? '0', 10);
   const accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
   const wrongCount = totalQuestions - correctCount;
   const mistakesJson = params.mistakesJson ?? '';
@@ -137,6 +143,7 @@ export default function LessonCompleteScreen() {
   const buttonsOpacity = useRef(new Animated.Value(0)).current;
   const perfectGlow = useRef(new Animated.Value(0)).current;
   const streakPulse = useRef(new Animated.Value(1)).current;
+  const starToastAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (Platform.OS !== 'web') {
@@ -218,6 +225,30 @@ export default function LessonCompleteScreen() {
     }
   }, [heroScale, heroOpacity, statsSlide, statsOpacity, buttonsSlide, buttonsOpacity, perfectGlow, streakPulse, isPerfect, streakCount]);
 
+  useEffect(() => {
+    if (!starEarned) return;
+
+    starToastAnim.setValue(0);
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    Animated.sequence([
+      Animated.spring(starToastAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 80,
+        useNativeDriver: true,
+      }),
+      Animated.delay(1400),
+      Animated.timing(starToastAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [starEarned, starToastAnim]);
+
   const handleOpenChest = () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -274,9 +305,43 @@ export default function LessonCompleteScreen() {
     outputRange: [0.3, 0.7],
   });
 
+  const starToastY = starToastAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-18, 0],
+  });
+
+  const starToastScale = starToastAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.92, 1],
+  });
+
+  const starsVisual = useMemo(() => {
+    const s = Math.max(0, Math.min(3, newStars));
+    return `${'⭐'.repeat(s)}${'☆'.repeat(3 - s)}`;
+  }, [newStars]);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <Stack.Screen options={{ headerShown: false }} />
+
+      {starEarned && (
+        <Animated.View
+          style={[
+            styles.starToast,
+            {
+              top: 12,
+              opacity: starToastAnim,
+              transform: [{ translateY: starToastY }, { scale: starToastScale }],
+            },
+          ]}
+        >
+          <Text style={styles.starToastEmoji}>⭐</Text>
+          <View style={styles.starToastTextWrap}>
+            <Text style={styles.starToastTitle}>Star earned!</Text>
+            <Text style={styles.starToastSub}>{starsVisual}  {newStars}/3</Text>
+          </View>
+        </Animated.View>
+      )}
 
       {confetti.map((piece, index) => (
         <Animated.View
@@ -669,6 +734,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700' as const,
   },
+  starToast: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: Colors.goldLight,
+    borderWidth: 1,
+    borderColor: Colors.gold,
+    zIndex: 250,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  starToastEmoji: {
+    fontSize: 20,
+  },
+  starToastTextWrap: {
+    alignItems: 'flex-start',
+  },
+  starToastTitle: {
+    fontSize: 15,
+    fontWeight: '900' as const,
+    color: '#92400E',
+    letterSpacing: -0.2,
+  },
+  starToastSub: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: '#92400E',
+    opacity: 0.9,
+    marginTop: 1,
+  },
+
   buttonPressed: {
     opacity: 0.85,
     transform: [{ scale: 0.97 }],
