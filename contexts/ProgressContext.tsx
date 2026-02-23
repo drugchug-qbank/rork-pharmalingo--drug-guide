@@ -38,6 +38,44 @@ function getProgressKey(userId: string | null): string {
 const HEART_REGEN_MINUTES = 60;
 const HEART_REGEN_MS = HEART_REGEN_MINUTES * 60 * 1000;
 
+// ----------------------------
+// ⭐ 3-Star "Gold Mastery" maps
+// ----------------------------
+// We increment stars ONLY for subsection lessons (chapter parts) in Modules 1–10.
+// We intentionally exclude the End Game module (mod-11) and any non-part lessons (e.g. mastery-mod-*).
+const PART_ID_TO_CHAPTER_ID: Record<string, string> = {};
+for (const ch of chapters) {
+  for (const p of ch.parts) {
+    PART_ID_TO_CHAPTER_ID[p.id] = ch.id;
+  }
+}
+
+function isStarEligibleLessonId(lessonId: string): boolean {
+  const chapterId = PART_ID_TO_CHAPTER_ID[lessonId];
+  if (!chapterId) return false;
+  // Exclude End Game module
+  if (chapterId === 'mod-11') return false;
+  return true;
+}
+
+function seedStarsFromCompletions(
+  completedLessons: Record<string, number> | undefined,
+  existingStars: Record<string, number> | undefined
+): Record<string, number> {
+  const next = { ...(existingStars ?? {}) };
+  const completed = completedLessons ?? {};
+
+  for (const lessonId of Object.keys(completed)) {
+    const score = completed[lessonId] ?? 0;
+    // If they already passed before this feature existed, grant 1 starter star.
+    if (score >= 70 && isStarEligibleLessonId(lessonId) && (next[lessonId] ?? 0) < 1) {
+      next[lessonId] = 1;
+    }
+  }
+
+  return next;
+}
+
 function isSameDay(d1: string, d2: string): boolean {
   if (!d1 || !d2) return false;
   return d1.slice(0, 10) === d2.slice(0, 10);
@@ -168,6 +206,7 @@ function migrateFromV1(stored: string): UserProgress | null {
         lastLootDateISO: '',
       },
       completedLessons: old.completedLessons ?? {},
+      lessonStars: seedStarsFromCompletions(old.completedLessons ?? {}, undefined),
       chapterProgress: old.chapterProgress ?? {},
       drugMastery: {},
       conceptMastery: {},
@@ -272,6 +311,7 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
               ...(parsed.stats ?? {}),
             },
             completedLessons: parsed.completedLessons ?? {},
+            lessonStars: seedStarsFromCompletions(parsed.completedLessons ?? {}, (parsed as any).lessonStars),
             chapterProgress: parsed.chapterProgress ?? {},
             drugMastery: parsed.drugMastery ?? {},
             conceptMastery: (parsed as any).conceptMastery ?? {},
@@ -368,6 +408,7 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
 
     const safeguarded: UserProgress = {
       ...data,
+      lessonStars: seedStarsFromCompletions(data.completedLessons ?? {}, (data as any).lessonStars),
       stats: {
         ...data.stats,
         hearts: regen.hearts,
@@ -712,6 +753,18 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
         const currentBest = prev.completedLessons[lessonId] ?? 0;
         const scorePercent = Math.round((correct / total) * 100);
 
+        // ⭐ 3-star mastery (extra replayability)
+        // Add +1 star each time a subsection (part) is PASSED (≥70%), capped at 3.
+        // Does NOT affect unlocking logic (still only requires one pass).
+        const isStarEligible = isStarEligibleLessonId(lessonId);
+        const passed = scorePercent >= 70;
+        const prevStars = prev.lessonStars?.[lessonId] ?? 0;
+        const nextStars = isStarEligible && passed ? Math.min(3, prevStars + 1) : prevStars;
+        const nextLessonStars =
+          nextStars !== prevStars
+            ? { ...(prev.lessonStars ?? {}), [lessonId]: nextStars }
+            : (prev.lessonStars ?? {});
+
         const streakUpdate = updateStreakOnLessonComplete(today, prev.stats);
 
         const isDoubleXp = prev.stats.doubleXpNextLesson ?? false;
@@ -757,6 +810,7 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
         return {
           ...prev,
           completedLessons: newCompleted,
+          lessonStars: nextLessonStars,
           chapterProgress: newChapterProgress,
           level: newLevel,
           stats: {
@@ -1107,6 +1161,31 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
     return progress.completedLessons[lessonId] ?? 0;
   }, [progress.completedLessons]);
 
+  // ⭐ 3-star mastery getters
+  const getLessonStars = useCallback(
+    (lessonId: string): number => {
+      return progress.lessonStars?.[lessonId] ?? 0;
+    },
+    [progress.lessonStars]
+  );
+
+  const isLessonGoldMastered = useCallback(
+    (lessonId: string): boolean => {
+      return getLessonStars(lessonId) >= 3;
+    },
+    [getLessonStars]
+  );
+
+  const isChapterGoldMastered = useCallback(
+    (chapterId: string): boolean => {
+      if (!chapterId || chapterId === 'mod-11') return false;
+      const ch = chapters.find((c) => c.id === chapterId);
+      if (!ch) return false;
+      return ch.parts.every((p) => (progress.lessonStars?.[p.id] ?? 0) >= 3);
+    },
+    [progress.lessonStars]
+  );
+
   const getChapterProgress = useCallback((chapterId: string): number => {
     return progress.chapterProgress[chapterId] ?? 0;
   }, [progress.chapterProgress]);
@@ -1373,6 +1452,9 @@ export const [ProgressProvider, useProgress] = createContextHook(() => {
     watchAdForHeart,
 
     getLessonScore,
+    getLessonStars,
+    isLessonGoldMastered,
+    isChapterGoldMastered,
     getChapterProgress,
     isLessonUnlocked,
 
