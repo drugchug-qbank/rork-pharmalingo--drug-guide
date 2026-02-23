@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, Mail, Lock, Eye, EyeOff, Phone, ChevronRight, X } from 'lucide-react-native';
+import { ArrowLeft, Mail, Lock, Eye, EyeOff, Phone, ChevronRight, X, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { supabase } from '@/utils/supabase';
@@ -22,8 +22,8 @@ const PROFESSIONS = [
   { code: 'pharmacy', name: 'Pharmacy', emoji: '💊' },
   { code: 'nursing', name: 'Nursing', emoji: '🩺' },
   { code: 'pa', name: 'Physician Assistant', emoji: '🧑‍⚕️' },
-  { code: 'physician', name: 'Physician (MD/DO)', emoji: '🩻' },
-  { code: 'medical_student', name: 'Medical Student', emoji: '📚' },
+  { code: 'physician_md', name: 'Physician MD', emoji: '🩻' },
+  { code: 'physician_do', name: 'Physician DO', emoji: '🩻' },
   { code: 'dentistry', name: 'Dentistry', emoji: '🦷' },
   { code: 'other', name: 'Other', emoji: '✨' },
 ] as const;
@@ -49,6 +49,7 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState<string>('');
   const [phone, setPhone] = useState<string>(''); // Optional for now (goal: required + verified later)
   const [professionCode, setProfessionCode] = useState<ProfessionCode | null>(null);
+  const [otherProfessionText, setOtherProfessionText] = useState<string>('');
 
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -94,6 +95,12 @@ export default function SignUpScreen() {
       return false;
     }
 
+    // If "Other", capture what they meant
+    if (professionCode === 'other' && !otherProfessionText.trim()) {
+      setError('Please enter your profession.');
+      return false;
+    }
+
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
       return false;
@@ -125,6 +132,10 @@ export default function SignUpScreen() {
       const metadata: Record<string, any> = {
         profession_code: prof, // ✅ required for DB trigger -> profiles.profession_id
       };
+
+      if (prof === 'other' && otherProfessionText.trim()) {
+        metadata.other_profession_text = otherProfessionText.trim();
+      }
 
       // Store phone number on the auth user as metadata (attached at signup)
       // Your DB trigger can copy + hash this into your private phone table later.
@@ -257,6 +268,25 @@ export default function SignUpScreen() {
                 </Text>
                 <ChevronRight size={18} color={Colors.textTertiary} />
               </Pressable>
+
+              {professionCode === 'other' ? (
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.helperText}>What best describes your profession?</Text>
+                  <View style={styles.inputContainer}>
+                    <Sparkles size={18} color={Colors.textTertiary} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Type your profession (e.g., Respiratory Therapy)"
+                      placeholderTextColor={Colors.textTertiary}
+                      value={otherProfessionText}
+                      onChangeText={setOtherProfessionText}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                      testID="other-profession-input"
+                    />
+                  </View>
+                </View>
+              ) : null}
 
               <Text style={styles.helperText}>
                 This sets which Profession you represent on the monthly Profession Leaderboard.
