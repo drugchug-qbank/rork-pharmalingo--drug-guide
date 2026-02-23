@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Award, Star, ChevronRight, Clock } from 'lucide-react-native';
+import React, { useMemo, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, Pressable, Modal, FlatList, useWindowDimensions, Alert } from 'react-native';
+import { Award, Star, ChevronRight, Clock, X } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { DrugMastery } from '@/constants/types';
 import { drugs, getDrugById } from '@/constants/drugData';
@@ -12,6 +12,10 @@ interface DrugMasteryCardProps {
 
 const MASTERY_COLORS = ['#CBD5E1', '#94A3B8', '#0EA5E9', '#8B5CF6', '#F59E0B', '#22C55E'];
 const MASTERY_LABELS = ['New', 'Learning', 'Familiar', 'Practiced', 'Strong', 'Mastered'];
+// Keep the swipe deck short + snackable. We can expand to a full list later if you want.
+const MAX_SWIPE_CARDS = 4;
+
+type MasteryBucket = 'mastered' | 'strong' | 'weak' | 'unseen';
 
 const MasteryBar = React.memo(function MasteryBar({ level }: { level: number }) {
   return (
@@ -65,6 +69,11 @@ const DrugMasteryRow = React.memo(function DrugMasteryRow({
 });
 
 export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: DrugMasteryCardProps) {
+  const { width: windowWidth } = useWindowDimensions();
+  const modalWidth = Math.min(windowWidth - 28, 520);
+  const [bucketOpen, setBucketOpen] = useState<MasteryBucket | null>(null);
+  const [bucketIndex, setBucketIndex] = useState(0);
+
   const stats = useMemo(() => {
     const now = Date.now();
     const entries = Object.entries(drugMastery);
@@ -80,6 +89,27 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
       return Number.isFinite(t) && t <= now;
     }).length;
     const unseen = Math.max(0, totalPossible - seen);
+
+    const masteryIdSet = new Set(entries.map(([id]) => id));
+    const unseenIds = drugs.filter(d => !masteryIdSet.has(d.id)).map(d => d.id);
+
+    const masteredIds = entries
+      .filter(([, m]) => m.masteryLevel >= 5)
+      .sort((a, b) => (b[1].lastSeenISO || '').localeCompare(a[1].lastSeenISO || ''))
+      .map(([id]) => id);
+
+    const strongIds = entries
+      .filter(([, m]) => m.masteryLevel === 4)
+      .sort((a, b) => (b[1].lastSeenISO || '').localeCompare(a[1].lastSeenISO || ''))
+      .map(([id]) => id);
+
+    const weakIds = entries
+      .filter(([, m]) => m.masteryLevel <= 1)
+      .sort((a, b) => {
+        if (a[1].masteryLevel !== b[1].masteryLevel) return a[1].masteryLevel - b[1].masteryLevel;
+        return (a[1].nextReviewISO || '').localeCompare(b[1].nextReviewISO || '');
+      })
+      .map(([id]) => id);
 
     const sorted = [...entries].sort((a, b) => {
       if (a[1].masteryLevel !== b[1].masteryLevel) return a[1].masteryLevel - b[1].masteryLevel;
@@ -111,11 +141,162 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
       displayDrugs = sorted.slice(0, 4);
     }
 
-    return { totalPossible, seen, mastered, strong, weak, unseen, dueNow, displayTitle, displayDrugs };
+    return {
+      totalPossible,
+      seen,
+      mastered,
+      strong,
+      weak,
+      unseen,
+      dueNow,
+      displayTitle,
+      displayDrugs,
+      masteredIds,
+      strongIds,
+      weakIds,
+      unseenIds,
+    };
   }, [drugMastery]);
 
   const masteryPercent = stats.totalPossible > 0 ? Math.round((stats.mastered / stats.totalPossible) * 100) : 0;
   const seenPercent = stats.totalPossible > 0 ? Math.round((stats.seen / stats.totalPossible) * 100) : 0;
+
+  const getBucketLabel = (bucket: MasteryBucket): string => {
+    switch (bucket) {
+      case 'mastered':
+        return 'Mastered';
+      case 'strong':
+        return 'Strong';
+      case 'weak':
+        return 'Weak';
+      case 'unseen':
+        return 'Unseen';
+    }
+  };
+
+  const bucketTotalCount = useMemo(() => {
+    if (!bucketOpen) return 0;
+    if (bucketOpen === 'mastered') return stats.masteredIds.length;
+    if (bucketOpen === 'strong') return stats.strongIds.length;
+    if (bucketOpen === 'weak') return stats.weakIds.length;
+    return stats.unseenIds.length;
+  }, [bucketOpen, stats.masteredIds.length, stats.strongIds.length, stats.weakIds.length, stats.unseenIds.length]);
+
+  const bucketIds = useMemo(() => {
+    if (!bucketOpen) return [] as string[];
+    const all =
+      bucketOpen === 'mastered'
+        ? stats.masteredIds
+        : bucketOpen === 'strong'
+          ? stats.strongIds
+          : bucketOpen === 'weak'
+            ? stats.weakIds
+            : stats.unseenIds;
+    return all.slice(0, MAX_SWIPE_CARDS);
+  }, [bucketOpen, stats.masteredIds, stats.strongIds, stats.weakIds, stats.unseenIds]);
+
+  const bucketIsTruncated = bucketOpen ? bucketTotalCount > bucketIds.length : false;
+
+  const openBucket = useCallback(
+    (bucket: MasteryBucket) => {
+      const count =
+        bucket === 'mastered'
+          ? stats.masteredIds.length
+          : bucket === 'strong'
+            ? stats.strongIds.length
+            : bucket === 'weak'
+              ? stats.weakIds.length
+              : stats.unseenIds.length;
+
+      if (count === 0) {
+        Alert.alert('Nothing here yet', `No ${getBucketLabel(bucket).toLowerCase()} drugs yet. Keep practicing!`);
+        return;
+      }
+
+      setBucketIndex(0);
+      setBucketOpen(bucket);
+    },
+    [stats.masteredIds.length, stats.strongIds.length, stats.weakIds.length, stats.unseenIds.length]
+  );
+
+  const closeBucket = useCallback(() => {
+    setBucketOpen(null);
+    setBucketIndex(0);
+  }, []);
+
+  const onBucketScrollEnd = useCallback(
+    (e: any) => {
+      const x = e?.nativeEvent?.contentOffset?.x ?? 0;
+      const idx = Math.round(x / Math.max(1, modalWidth));
+      if (Number.isFinite(idx)) setBucketIndex(idx);
+    },
+    [modalWidth]
+  );
+
+  const renderBucketCard = useCallback(
+    ({ item: drugId }: { item: string }) => {
+      const drug = getDrugById(drugId);
+      if (!drug) return <View style={[styles.bucketPage, { width: modalWidth }]} />;
+
+      const mastery = drugMastery[drugId];
+      const isUnseen = bucketOpen === 'unseen' || !mastery;
+      const masteryLevel = isUnseen ? 0 : mastery.masteryLevel;
+
+      const label = isUnseen ? 'Unseen' : MASTERY_LABELS[masteryLevel] ?? 'Learning';
+      const labelColor = isUnseen ? '#94A3B8' : MASTERY_COLORS[masteryLevel] ?? '#94A3B8';
+
+      const uses = (drug.indications ?? []).slice(0, 3);
+      const aes = (drug.sideEffects ?? []).slice(0, 3);
+
+      return (
+        <View style={[styles.bucketPage, { width: modalWidth }]}>
+          <View style={styles.bucketCard}>
+            <Text style={styles.bucketBrand} numberOfLines={2}>
+              {drug.brandName}
+            </Text>
+            <Text style={styles.bucketGeneric} numberOfLines={2}>
+              {drug.genericName}
+            </Text>
+
+            <View style={styles.bucketChip}>
+              <Text style={styles.bucketChipText} numberOfLines={2}>
+                {drug.drugClass}
+              </Text>
+            </View>
+
+            <View style={styles.bucketFacts}>
+              {uses.length > 0 && (
+                <Text style={styles.bucketFact} numberOfLines={2}>
+                  <Text style={styles.factEmoji}>🎯 </Text>
+                  <Text style={styles.factLabel}>Uses: </Text>
+                  {uses.join(' • ')}
+                </Text>
+              )}
+              {aes.length > 0 && (
+                <Text style={styles.bucketFact} numberOfLines={2}>
+                  <Text style={styles.factEmoji}>⚠️ </Text>
+                  <Text style={styles.factLabel}>AEs: </Text>
+                  {aes.join(' • ')}
+                </Text>
+              )}
+              {drug.keyFact ? (
+                <Text style={styles.bucketPearl} numberOfLines={3}>
+                  <Text style={styles.factEmoji}>✨ </Text>
+                  {drug.keyFact}
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.bucketFooter}>
+              <MasteryBar level={masteryLevel} />
+              <Text style={[styles.bucketStatus, { color: labelColor }]}>{label}</Text>
+            </View>
+          </View>
+        </View>
+      );
+    },
+    [bucketOpen, drugMastery, modalWidth]
+  );
 
   return (
     <View style={styles.container}>
@@ -146,22 +327,22 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
       </View>
 
       <View style={styles.levelBreakdown}>
-        <View style={styles.levelItem}>
+        <Pressable onPress={() => openBucket('mastered')} style={styles.levelItem} hitSlop={8}>
           <View style={[styles.levelDot, { backgroundColor: '#22C55E' }]} />
           <Text style={styles.levelText}>{stats.mastered} Mastered</Text>
-        </View>
-        <View style={styles.levelItem}>
+        </Pressable>
+        <Pressable onPress={() => openBucket('strong')} style={styles.levelItem} hitSlop={8}>
           <View style={[styles.levelDot, { backgroundColor: '#F59E0B' }]} />
           <Text style={styles.levelText}>{stats.strong} Strong</Text>
-        </View>
-        <View style={styles.levelItem}>
+        </Pressable>
+        <Pressable onPress={() => openBucket('weak')} style={styles.levelItem} hitSlop={8}>
           <View style={[styles.levelDot, { backgroundColor: '#EF4444' }]} />
           <Text style={styles.levelText}>{stats.weak} Weak</Text>
-        </View>
-        <View style={styles.levelItem}>
+        </Pressable>
+        <Pressable onPress={() => openBucket('unseen')} style={styles.levelItem} hitSlop={8}>
           <View style={[styles.levelDot, { backgroundColor: '#CBD5E1' }]} />
           <Text style={styles.levelText}>{stats.unseen} Unseen</Text>
-        </View>
+        </Pressable>
       </View>
 
       {stats.displayDrugs.length > 0 && (
@@ -189,6 +370,45 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
           <ChevronRight size={16} color={Colors.primary} />
         </Pressable>
       )}
+
+      <Modal
+        visible={bucketOpen !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeBucket}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { width: modalWidth }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={styles.modalTitle}>{bucketOpen ? getBucketLabel(bucketOpen) : ''}</Text>
+                <Text style={styles.modalSub}>
+                  {bucketTotalCount} drug{bucketTotalCount === 1 ? '' : 's'} • Swipe →
+                  {bucketIds.length > 0 ? `   ${bucketIndex + 1}/${bucketIds.length}` : ''}
+                </Text>
+                {bucketIsTruncated && (
+                  <Text style={styles.modalNote}>Showing {bucketIds.length} of {bucketTotalCount}</Text>
+                )}
+              </View>
+
+              <Pressable onPress={closeBucket} style={styles.modalClose} hitSlop={8}>
+                <X size={18} color={Colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            <FlatList
+              data={bucketIds}
+              keyExtractor={(id) => id}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              renderItem={renderBucketCard}
+              onMomentumScrollEnd={onBucketScrollEnd}
+              bounces={false}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 });
@@ -395,5 +615,136 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700' as const,
     color: Colors.primary,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.surfaceAlt,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '900' as const,
+    color: Colors.text,
+  },
+  modalSub: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: Colors.textSecondary,
+    marginTop: 3,
+  },
+  modalNote: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  modalClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  bucketPage: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  bucketCard: {
+    backgroundColor: Colors.background,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  bucketBrand: {
+    fontSize: 20,
+    fontWeight: '900' as const,
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  bucketGeneric: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  bucketChip: {
+    alignSelf: 'center',
+    marginTop: 10,
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    maxWidth: '100%',
+  },
+  bucketChipText: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: Colors.primaryDark,
+    textAlign: 'center',
+  },
+  bucketFacts: {
+    marginTop: 12,
+    gap: 8,
+  },
+  bucketFact: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: Colors.text,
+    lineHeight: 18,
+  },
+  bucketPearl: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: Colors.textSecondary,
+    lineHeight: 17,
+  },
+  factEmoji: {
+    fontSize: 13,
+  },
+  factLabel: {
+    fontWeight: '900' as const,
+    color: Colors.primaryDark,
+  },
+  bucketFooter: {
+    marginTop: 14,
+    alignItems: 'center',
+    gap: 6,
+  },
+  bucketStatus: {
+    fontSize: 12,
+    fontWeight: '900' as const,
   },
 });
