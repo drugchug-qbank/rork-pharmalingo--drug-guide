@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Award, Star, ChevronRight } from 'lucide-react-native';
+import { Award, Star, ChevronRight, Clock } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { DrugMastery } from '@/constants/types';
-import { getDrugById } from '@/constants/drugData';
+import { drugs, getDrugById } from '@/constants/drugData';
 
 interface DrugMasteryCardProps {
   drugMastery: Record<string, DrugMastery>;
@@ -66,27 +66,56 @@ const DrugMasteryRow = React.memo(function DrugMasteryRow({
 
 export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: DrugMasteryCardProps) {
   const stats = useMemo(() => {
+    const now = Date.now();
     const entries = Object.entries(drugMastery);
-    const total = entries.length;
+    const seen = entries.length;
+    const totalPossible = drugs.length;
+
     const mastered = entries.filter(([, m]) => m.masteryLevel >= 5).length;
-    const strong = entries.filter(([, m]) => m.masteryLevel >= 4).length;
+    const strong = entries.filter(([, m]) => m.masteryLevel === 4).length;
     const weak = entries.filter(([, m]) => m.masteryLevel <= 1).length;
+    const dueNow = entries.filter(([, m]) => {
+      if (!m.nextReviewISO) return false;
+      const t = new Date(m.nextReviewISO).getTime();
+      return Number.isFinite(t) && t <= now;
+    }).length;
+    const unseen = Math.max(0, totalPossible - seen);
 
     const sorted = [...entries].sort((a, b) => {
       if (a[1].masteryLevel !== b[1].masteryLevel) return a[1].masteryLevel - b[1].masteryLevel;
       return (a[1].nextReviewISO || '').localeCompare(b[1].nextReviewISO || '');
     });
 
-    const weakDrugs = sorted.filter(([, m]) => m.masteryLevel < 3).slice(0, 4);
-    const masteredDrugs = sorted.filter(([, m]) => m.masteryLevel >= 5).slice(0, 4);
-    const displayDrugs = weakDrugs.length > 0 ? weakDrugs : masteredDrugs.length > 0 ? masteredDrugs : sorted.slice(0, 4);
+    const dueList = sorted.filter(([, m]) => {
+      if (!m.nextReviewISO) return false;
+      const t = new Date(m.nextReviewISO).getTime();
+      return Number.isFinite(t) && t <= now;
+    });
 
-    return { total, mastered, strong, weak, displayDrugs };
+    const needsPractice = sorted.filter(([, m]) => m.masteryLevel < 3);
+    const topMastered = sorted.filter(([, m]) => m.masteryLevel >= 5);
+
+    let displayTitle = 'Needs Practice';
+    let displayDrugs = needsPractice.slice(0, 4);
+    if (dueList.length > 0) {
+      displayTitle = 'Due for Review';
+      displayDrugs = dueList.slice(0, 4);
+    } else if (needsPractice.length > 0) {
+      displayTitle = 'Needs Practice';
+      displayDrugs = needsPractice.slice(0, 4);
+    } else if (topMastered.length > 0) {
+      displayTitle = 'Top Mastered';
+      displayDrugs = topMastered.slice(0, 4);
+    } else {
+      displayTitle = 'Recently Studied';
+      displayDrugs = sorted.slice(0, 4);
+    }
+
+    return { totalPossible, seen, mastered, strong, weak, unseen, dueNow, displayTitle, displayDrugs };
   }, [drugMastery]);
 
-  if (stats.total === 0) return null;
-
-  const masteryPercent = stats.total > 0 ? Math.round((stats.mastered / stats.total) * 100) : 0;
+  const masteryPercent = stats.totalPossible > 0 ? Math.round((stats.mastered / stats.totalPossible) * 100) : 0;
+  const seenPercent = stats.totalPossible > 0 ? Math.round((stats.seen / stats.totalPossible) * 100) : 0;
 
   return (
     <View style={styles.container}>
@@ -98,13 +127,21 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
           <View>
             <Text style={styles.headerTitle}>Drug Mastery</Text>
             <Text style={styles.headerSub}>
-              {stats.mastered}/{stats.total} mastered ({masteryPercent}%)
+              {stats.mastered}/{stats.totalPossible} mastered • {stats.seen}/{stats.totalPossible} seen
             </Text>
           </View>
         </View>
+
+        {stats.dueNow > 0 && (
+          <View style={styles.duePill}>
+            <Clock size={12} color="#FFFFFF" />
+            <Text style={styles.duePillText}>{stats.dueNow} due</Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.overallBar}>
+        <View style={[styles.overallBarSeen, { width: `${seenPercent}%` }]} />
         <View style={[styles.overallBarFill, { width: `${masteryPercent}%` }]} />
       </View>
 
@@ -121,20 +158,29 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
           <View style={[styles.levelDot, { backgroundColor: '#EF4444' }]} />
           <Text style={styles.levelText}>{stats.weak} Weak</Text>
         </View>
+        <View style={styles.levelItem}>
+          <View style={[styles.levelDot, { backgroundColor: '#CBD5E1' }]} />
+          <Text style={styles.levelText}>{stats.unseen} Unseen</Text>
+        </View>
       </View>
 
       {stats.displayDrugs.length > 0 && (
         <View style={styles.drugList}>
-          <Text style={styles.drugListTitle}>
-            {stats.displayDrugs[0][1].masteryLevel < 3 ? 'Needs Practice' : 'Top Mastered'}
-          </Text>
+          <Text style={styles.drugListTitle}>{stats.displayTitle}</Text>
           {stats.displayDrugs.map(([drugId, mastery]) => (
             <DrugMasteryRow key={drugId} drugId={drugId} mastery={mastery} />
           ))}
         </View>
       )}
 
-      {onViewAll && stats.total > 4 && (
+      {stats.displayDrugs.length === 0 && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Start building mastery</Text>
+          <Text style={styles.emptyText}>Complete a quiz or practice session to start tracking your Top 300 progress.</Text>
+        </View>
+      )}
+
+      {onViewAll && stats.seen > 4 && (
         <Pressable
           onPress={onViewAll}
           style={({ pressed }) => [styles.viewAllButton, pressed && { opacity: 0.7 }]}
@@ -192,16 +238,42 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   overallBar: {
+    position: 'relative',
     height: 8,
     backgroundColor: '#E2E8F0',
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 12,
   },
+  overallBarSeen: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(14,165,233,0.35)',
+    borderRadius: 4,
+  },
   overallBarFill: {
-    height: 8,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
     backgroundColor: Colors.success,
     borderRadius: 4,
+  },
+  duePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.warning,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  duePillText: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: '#FFFFFF',
   },
   levelBreakdown: {
     flexDirection: 'row',
@@ -227,6 +299,24 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.surfaceAlt,
     paddingTop: 12,
+  },
+  emptyState: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.surfaceAlt,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+  emptyTitle: {
+    fontSize: 13,
+    fontWeight: '800' as const,
+    color: Colors.text,
+  },
+  emptyText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    lineHeight: 16,
   },
   drugListTitle: {
     fontSize: 13,

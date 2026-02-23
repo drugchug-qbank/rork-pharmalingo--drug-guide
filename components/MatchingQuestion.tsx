@@ -7,7 +7,12 @@ import { MatchPair } from '@/constants/types';
 interface MatchingQuestionProps {
   pairs: MatchPair[];
   shuffledGenerics: string[];
-  onComplete: (allCorrectFirstTry: boolean, correctCount: number, totalPairs: number) => void;
+  onComplete: (
+    allCorrectFirstTry: boolean,
+    correctFirstTryCount: number,
+    totalPairs: number,
+    drugFirstTryMap: Record<string, boolean>
+  ) => void;
 }
 
 type PairStatus = 'default' | 'correct' | 'incorrect';
@@ -20,6 +25,10 @@ export default React.memo(function MatchingQuestion({ pairs, shuffledGenerics, o
   const [genericStatuses, setGenericStatuses] = useState<Record<string, PairStatus>>({});
   const [mistakes, setMistakes] = useState<number>(0);
   const [completed, setCompleted] = useState<boolean>(false);
+
+  // Track whether each *pair* had any wrong attempts before being matched.
+  // Keyed by brand text (unique per pair).
+  const pairHadMistakeRef = useRef<Record<string, boolean>>({});
 
   const shakeAnims = useRef<Record<string, Animated.Value>>({});
   const scaleAnims = useRef<Record<string, Animated.Value>>({});
@@ -70,6 +79,8 @@ export default React.memo(function MatchingQuestion({ pairs, shuffledGenerics, o
     } else {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setMistakes(prev => prev + 1);
+
+      pairHadMistakeRef.current[brand] = true;
 
       setBrandStatuses(prev => ({ ...prev, [brand]: 'incorrect' }));
       setGenericStatuses(prev => ({ ...prev, [generic]: 'incorrect' }));
@@ -132,12 +143,18 @@ export default React.memo(function MatchingQuestion({ pairs, shuffledGenerics, o
   useEffect(() => {
     if (!completed && Object.keys(matchedPairs).length === pairs.length) {
       setCompleted(true);
-      const allCorrectFirstTry = mistakes === 0;
+      const drugFirstTryMap: Record<string, boolean> = {};
+      pairs.forEach(p => {
+        drugFirstTryMap[p.drugId] = !pairHadMistakeRef.current[p.brand];
+      });
+
+      const correctFirstTryCount = Object.values(drugFirstTryMap).filter(Boolean).length;
+      const allCorrectFirstTry = correctFirstTryCount === pairs.length;
       setTimeout(() => {
-        onComplete(allCorrectFirstTry, pairs.length - mistakes, pairs.length);
+        onComplete(allCorrectFirstTry, correctFirstTryCount, pairs.length, drugFirstTryMap);
       }, 500);
     }
-  }, [matchedPairs, pairs.length, mistakes, onComplete, completed]);
+  }, [matchedPairs, pairs, mistakes, onComplete, completed]);
 
   const getBrandStyle = (brand: string) => {
     const status = brandStatuses[brand];
