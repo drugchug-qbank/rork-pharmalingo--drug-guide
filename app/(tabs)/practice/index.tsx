@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Dumbbell, Shuffle, Target, Clock, Zap, TrendingUp, Brain, AlertCircle, RotateCcw, Flame } from 'lucide-react-native';
+import { Dumbbell, Shuffle, Target, Clock, Zap, TrendingUp, Brain, AlertCircle, RotateCcw } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useProgress } from '@/contexts/ProgressContext';
 import { chapters } from '@/constants/chapters';
@@ -168,11 +168,10 @@ export default function PracticeScreen() {
             </View>
             <View style={styles.quickPracticeText}>
               <Text style={styles.quickPracticeTitle}>Brand Blitz Quiz ⚡️</Text>
-              <Text style={styles.quickPracticeDesc}>15 brand ↔ generic • 70%+ saves streak</Text>
+              <Text style={styles.quickPracticeDesc}>15 rapid‑fire questions</Text>
             </View>
-            <View style={styles.blitzPill}>
-              <Flame size={16} color="#FFFFFF" />
-              <Text style={styles.blitzPillText}>70%+</Text>
+            <View style={styles.playCircle}>
+              <Dumbbell size={20} color={Colors.primary} />
             </View>
           </LinearGradient>
         </Pressable>
