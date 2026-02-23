@@ -23,6 +23,7 @@ export default function LearnScreen() {
   const {
     progress,
     getChapterProgress,
+    isChapterGoldMastered,
     isLessonUnlocked,
     getDailyQuests,
     claimDailyQuest,
@@ -122,6 +123,7 @@ export default function LearnScreen() {
             const unlocked = isChapterUnlocked(index);
             const chapterProg = getChapterProgress(chapter.id);
             const isEndgame = chapter.id === 'mod-11';
+            const goldMastered = !isEndgame && isChapterGoldMastered(chapter.id);
 
             return (
               <React.Fragment key={chapter.id}>
@@ -144,6 +146,7 @@ export default function LearnScreen() {
                   isLocked={!unlocked}
                   index={index}
                   special={isEndgame}
+                  mastered={goldMastered}
                   onLockedPress={
                     isEndgame && !unlocked
                       ? () =>

@@ -35,6 +35,8 @@ type ChapterNodeProps = {
   onLockedPress?: () => void;
   /** Special styling (gold/glow) for the End Game module. */
   special?: boolean;
+  /** Gold mastery styling (glow) when ALL subsections in a module have 3 stars. */
+  mastered?: boolean;
 };
 
 const ICON_MAP: Record<string, IconComponent> = {
@@ -63,6 +65,7 @@ export default function ChapterNode({
   onPress,
   onLockedPress,
   special,
+  mastered,
 }: ChapterNodeProps) {
   const pct = useMemo(() => {
     const n = Number(progress ?? 0);
@@ -73,8 +76,10 @@ export default function ChapterNode({
   const isCompleted = !isLocked && pct >= 100;
   const isInProgress = !isLocked && pct > 0 && pct < 100;
 
-  // Bubble shows for: locked, in-progress, completed, OR special (End Game)
-  const showStatusBubble = Boolean(special) || isLocked || isInProgress || isCompleted;
+  const isGold = !isLocked && (Boolean(special) || Boolean(mastered));
+
+  // Bubble shows for: locked, in-progress, completed, gold mastered, OR special (End Game)
+  const showStatusBubble = isGold || isLocked || isInProgress || isCompleted;
 
   const bubble = useMemo(() => {
     if (isLocked) {
@@ -88,6 +93,14 @@ export default function ChapterNode({
     if (special && !isCompleted && !isInProgress) {
       return {
         text: 'END GAME ✨',
+        bg: Colors.gold,
+        border: 'rgba(255,255,255,0.22)',
+        fg: '#FFFFFF',
+      };
+    }
+    if (mastered) {
+      return {
+        text: 'MASTERED ⭐⭐⭐',
         bg: Colors.gold,
         border: 'rgba(255,255,255,0.22)',
         fg: '#FFFFFF',
@@ -110,7 +123,7 @@ export default function ChapterNode({
       };
     }
     return null;
-  }, [isLocked, isCompleted, isInProgress, color, special]);
+  }, [isLocked, isCompleted, isInProgress, color, special, mastered]);
 
   // ✅ IMPORTANT: Resolve icon safely so we never render <Heart> as a web tag
   const ResolvedIcon: IconComponent | null = useMemo(() => {
@@ -138,9 +151,9 @@ export default function ChapterNode({
   }, [icon]);
 
   const iconColor = isLocked ? Colors.textTertiary : '#FFFFFF';
-  const iconBg = isLocked ? Colors.surfaceAlt : (special ? Colors.gold : color);
+  const iconBg = isLocked ? Colors.surfaceAlt : (isGold ? Colors.gold : color);
 
-  const borderColor = isLocked ? Colors.surfaceAlt : (special ? Colors.gold : color);
+  const borderColor = isLocked ? Colors.surfaceAlt : (isGold ? Colors.gold : color);
 
   const canPress = !isLocked || Boolean(onLockedPress);
   const handlePress = () => {
@@ -162,13 +175,13 @@ export default function ChapterNode({
           opacity: isLocked ? 0.55 : 1,
         },
         !isLocked && { borderWidth: 1.6 },
-        special && !isLocked && styles.specialGlow,
+        isGold && !isLocked && styles.specialGlow,
         pressed && !isLocked && { transform: [{ scale: 0.99 }] },
       ]}
       testID={`chapter-node-${index}`}
     >
       {/* Subtle glowing ring for special End Game */}
-      {special && !isLocked ? <View pointerEvents="none" style={styles.glowRing} /> : null}
+      {isGold && !isLocked ? <View pointerEvents="none" style={styles.glowRing} /> : null}
       {showStatusBubble && bubble ? (
         <View
           style={[
@@ -200,7 +213,12 @@ export default function ChapterNode({
 
         <View style={styles.content}>
           <View style={styles.topRow}>
-            <Text style={[styles.moduleLabel, { color: isLocked ? Colors.textTertiary : color }]}>
+            <Text
+              style={[
+                styles.moduleLabel,
+                { color: isLocked ? Colors.textTertiary : (isGold ? Colors.gold : color) },
+              ]}
+            >
               MODULE {index + 1}
             </Text>
           </View>
@@ -219,13 +237,18 @@ export default function ChapterNode({
                   styles.progressFill,
                   {
                     width: `${pct}%`,
-                    backgroundColor: isLocked ? Colors.border : color,
+                    backgroundColor: isLocked ? Colors.border : (isGold ? Colors.gold : color),
                   },
                 ]}
               />
             </View>
 
-            <Text style={[styles.percentText, { color: isLocked ? Colors.textTertiary : color }]}>
+            <Text
+              style={[
+                styles.percentText,
+                { color: isLocked ? Colors.textTertiary : (isGold ? Colors.gold : color) },
+              ]}
+            >
               {pct}%
             </Text>
           </View>

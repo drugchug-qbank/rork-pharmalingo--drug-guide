@@ -14,7 +14,13 @@ export default function ChapterDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { progress, getLessonScore, isLessonUnlocked, getChapterProgress } = useProgress();
+  const {
+    progress,
+    getLessonScore,
+    getLessonStars,
+    isLessonUnlocked,
+    getChapterProgress,
+  } = useProgress();
   const [showOutOfHearts, setShowOutOfHearts] = useState<boolean>(false);
 
   const chapter = getChapterById(id ?? '');
@@ -75,6 +81,7 @@ export default function ChapterDetailScreen() {
       >
         {chapter.parts.map((part, index) => {
           const score = getLessonScore(part.id);
+          const stars = getLessonStars(part.id);
           const unlocked = isLessonUnlocked(chapter.id, index);
           const completed = score >= 70;
           const perfect = score >= 100;
@@ -87,6 +94,7 @@ export default function ChapterDetailScreen() {
               description={part.description}
               questionCount={questionCount}
               score={score}
+              stars={stars}
               unlocked={unlocked}
               completed={completed}
               perfect={perfect}
@@ -172,6 +180,7 @@ interface LessonCardProps {
   description: string;
   questionCount: number;
   score: number;
+  stars: number;
   unlocked: boolean;
   completed: boolean;
   perfect: boolean;
@@ -186,6 +195,7 @@ const LessonCard = React.memo(function LessonCard({
   description,
   questionCount,
   score,
+  stars,
   unlocked,
   completed,
   perfect,
@@ -195,6 +205,7 @@ const LessonCard = React.memo(function LessonCard({
   onLockedPress,
 }: LessonCardProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const goldMastered = unlocked && stars >= 3;
 
   const handlePressIn = useCallback(() => {
     if (!unlocked && !onLockedPress) return;
@@ -219,7 +230,7 @@ const LessonCard = React.memo(function LessonCard({
         onPress={unlocked ? onPress : onLockedPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={[styles.lessonCard, !unlocked && styles.lockedCard]}
+        style={[styles.lessonCard, !unlocked && styles.lockedCard, goldMastered && styles.lessonCardGold]}
         testID={`lesson-card-${index}`}
       >
         <View style={styles.lessonLeft}>
@@ -252,9 +263,21 @@ const LessonCard = React.memo(function LessonCard({
         </View>
 
         <View style={styles.lessonRight}>
+          {unlocked ? (
+            <View style={styles.starsRow}>
+              {[1, 2, 3].map((i) => (
+                <Star
+                  key={`star-${i}`}
+                  size={14}
+                  color={i <= stars ? Colors.gold : Colors.border}
+                  fill={i <= stars ? Colors.gold : 'transparent'}
+                />
+              ))}
+            </View>
+          ) : null}
+
           {unlocked && completed && (
             <View style={styles.scoreContainer}>
-              {perfect && <Star size={14} color={Colors.gold} fill={Colors.gold} />}
               <Text style={[styles.scoreText, { color: perfect ? Colors.gold : Colors.success }]}>
                 {score}%
               </Text>
@@ -354,6 +377,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surfaceAlt,
   },
+  lessonCardGold: {
+    borderColor: Colors.gold,
+    borderWidth: 2,
+    shadowColor: Colors.gold,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 7,
+  },
   lockedCard: {
     opacity: 0.5,
   },
@@ -398,6 +430,13 @@ const styles = StyleSheet.create({
   lessonRight: {
     marginLeft: 8,
     alignItems: 'flex-end',
+  },
+  starsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 2,
+    marginBottom: 6,
   },
   scoreContainer: {
     flexDirection: 'row',

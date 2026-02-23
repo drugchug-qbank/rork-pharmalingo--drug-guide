@@ -210,6 +210,12 @@ export interface LootReward {
 export interface UserProgress {
   stats: UserStats;
   completedLessons: Record<string, number>;
+  /**
+   * 3-star mastery for each subsection (lesson/part).
+   * Each time the learner PASSES a subsection (≥70%) we add +1 star, capped at 3.
+   * Used for "gold mastering" sections & whole modules.
+   */
+  lessonStars: Record<string, number>;
   chapterProgress: Record<string, number>;
   drugMastery: Record<string, DrugMastery>;
   conceptMastery: Record<string, ConceptMastery>;
@@ -256,6 +262,7 @@ export const DEFAULT_STATS: UserStats = {
 export const DEFAULT_PROGRESS: UserProgress = {
   stats: { ...DEFAULT_STATS },
   completedLessons: {},
+  lessonStars: {},
   chapterProgress: {},
   drugMastery: {},
   conceptMastery: {},
