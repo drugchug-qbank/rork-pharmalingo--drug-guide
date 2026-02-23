@@ -9,6 +9,7 @@ export interface UserProfile {
   username: string | null;
   school_id: string | null;
   school_name: string | null;
+  profession_id: number | null;
   created_at: string;
 }
 
@@ -60,6 +61,10 @@ function isProfileIncomplete(p: UserProfile | null): boolean {
   if (!isValidPublicUsername(p.username)) return true;
   // Also treat email-like display_name as incomplete (force user to fix)
   if (looksLikeEmail(p.display_name)) return true;
+
+  // ✅ Profession is required for leaderboards + monthly Profession Battle
+  if (p.profession_id == null) return true;
+
   return false;
 }
 
@@ -303,15 +308,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     const savedProfile: UserProfile = {
       id: user.id,
-      display_name: displayNameNorm,
-      username: usernameNorm,
-      school_id: null,
-      school_name: schoolName ?? null,
-      created_at: data?.created_at ?? new Date().toISOString(),
+      display_name: (data as any)?.display_name ?? displayNameNorm,
+      username: (data as any)?.username ?? usernameNorm,
+      school_id: (data as any)?.school_id ?? null,
+      school_name: (data as any)?.school_name ?? (schoolName ?? null),
+      profession_id: (data as any)?.profession_id ?? null,
+      created_at: (data as any)?.created_at ?? new Date().toISOString(),
     };
 
     setProfile(savedProfile);
-    setNeedsProfile(false);
+    setNeedsProfile(isProfileIncomplete(savedProfile));
     console.log('[Auth] Profile completed successfully');
   }, [user]);
 
