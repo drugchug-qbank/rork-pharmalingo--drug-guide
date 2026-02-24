@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, FlatList, useWindowDimensions, Alert } from 'react-native';
-import { Award, Star, ChevronRight, Clock, X } from 'lucide-react-native';
+import { Award, Star, ChevronRight, ChevronLeft, Clock, X } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { DrugMastery } from '@/constants/types';
 import { drugs, getDrugById } from '@/constants/drugData';
@@ -12,10 +12,9 @@ interface DrugMasteryCardProps {
 
 const MASTERY_COLORS = ['#CBD5E1', '#94A3B8', '#0EA5E9', '#8B5CF6', '#F59E0B', '#22C55E'];
 const MASTERY_LABELS = ['New', 'Learning', 'Familiar', 'Practiced', 'Strong', 'Mastered'];
-// Keep the swipe deck short + snackable. We can expand to a full list later if you want.
-const MAX_SWIPE_CARDS = 4;
 
 type MasteryBucket = 'mastered' | 'strong' | 'weak' | 'unseen';
+type BucketViewMode = 'list' | 'swipe';
 
 const MasteryBar = React.memo(function MasteryBar({ level }: { level: number }) {
   return (
@@ -69,10 +68,13 @@ const DrugMasteryRow = React.memo(function DrugMasteryRow({
 });
 
 export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: DrugMasteryCardProps) {
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const modalWidth = Math.min(windowWidth - 28, 520);
+  const modalMaxHeight = Math.min(windowHeight - 160, 700);
+
   const [bucketOpen, setBucketOpen] = useState<MasteryBucket | null>(null);
   const [bucketIndex, setBucketIndex] = useState(0);
+  const [bucketView, setBucketView] = useState<BucketViewMode>('list');
 
   const stats = useMemo(() => {
     const now = Date.now();
@@ -182,20 +184,16 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
     return stats.unseenIds.length;
   }, [bucketOpen, stats.masteredIds.length, stats.strongIds.length, stats.weakIds.length, stats.unseenIds.length]);
 
-  const bucketIds = useMemo(() => {
+  const bucketIdsAll = useMemo(() => {
     if (!bucketOpen) return [] as string[];
-    const all =
-      bucketOpen === 'mastered'
-        ? stats.masteredIds
-        : bucketOpen === 'strong'
-          ? stats.strongIds
-          : bucketOpen === 'weak'
-            ? stats.weakIds
-            : stats.unseenIds;
-    return all.slice(0, MAX_SWIPE_CARDS);
+    return bucketOpen === 'mastered'
+      ? stats.masteredIds
+      : bucketOpen === 'strong'
+        ? stats.strongIds
+        : bucketOpen === 'weak'
+          ? stats.weakIds
+          : stats.unseenIds;
   }, [bucketOpen, stats.masteredIds, stats.strongIds, stats.weakIds, stats.unseenIds]);
-
-  const bucketIsTruncated = bucketOpen ? bucketTotalCount > bucketIds.length : false;
 
   const openBucket = useCallback(
     (bucket: MasteryBucket) => {
@@ -214,6 +212,7 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
       }
 
       setBucketIndex(0);
+      setBucketView('list');
       setBucketOpen(bucket);
     },
     [stats.masteredIds.length, stats.strongIds.length, stats.weakIds.length, stats.unseenIds.length]
@@ -222,7 +221,16 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
   const closeBucket = useCallback(() => {
     setBucketOpen(null);
     setBucketIndex(0);
+    setBucketView('list');
   }, []);
+
+  const openBucketSwiperAt = useCallback((index: number) => {
+    if (!bucketOpen) return;
+    const max = bucketIdsAll.length;
+    const safeIndex = Math.min(Math.max(0, index), Math.max(0, max - 1));
+    setBucketIndex(safeIndex);
+    setBucketView('swipe');
+  }, [bucketOpen, bucketIdsAll.length]);
 
   const onBucketScrollEnd = useCallback(
     (e: any) => {
@@ -231,6 +239,39 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
       if (Number.isFinite(idx)) setBucketIndex(idx);
     },
     [modalWidth]
+  );
+
+  const renderBucketListRow = useCallback(
+    ({ item: drugId, index }: { item: string; index: number }) => {
+      const drug = getDrugById(drugId);
+      if (!drug) return null;
+
+      const mastery = drugMastery[drugId];
+      const isUnseen = bucketOpen === 'unseen' || !mastery;
+      const masteryLevel = isUnseen ? 0 : mastery.masteryLevel;
+      const label = isUnseen ? 'Unseen' : MASTERY_LABELS[masteryLevel] ?? 'Learning';
+      const labelColor = isUnseen ? '#94A3B8' : MASTERY_COLORS[masteryLevel] ?? '#94A3B8';
+
+      return (
+        <Pressable
+          onPress={() => openBucketSwiperAt(index)}
+          style={({ pressed }) => [styles.bucketListRow, pressed ? { opacity: 0.85 } : null]}
+        >
+          <View style={{ flex: 1, paddingRight: 10 }}>
+            <Text style={styles.bucketListBrand} numberOfLines={1}>{drug.brandName}</Text>
+            <Text style={styles.bucketListGeneric} numberOfLines={1}>{drug.genericName}</Text>
+          </View>
+
+          <View style={styles.bucketListRight}>
+            {!isUnseen ? <MasteryBar level={masteryLevel} /> : <View style={styles.bucketListUnseenBar} />}
+            <Text style={[styles.bucketListLabel, { color: labelColor }]} numberOfLines={1}>{label}</Text>
+          </View>
+
+          <ChevronRight size={18} color={Colors.textSecondary} />
+        </Pressable>
+      );
+    },
+    [bucketOpen, drugMastery, openBucketSwiperAt]
   );
 
   const renderBucketCard = useCallback(
@@ -378,17 +419,32 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
         onRequestClose={closeBucket}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { width: modalWidth }]}>
+          <View style={[styles.modalContent, { width: modalWidth, maxHeight: modalMaxHeight }]}>
             <View style={styles.modalHeader}>
-              <View style={{ flex: 1, paddingRight: 10 }}>
-                <Text style={styles.modalTitle}>{bucketOpen ? getBucketLabel(bucketOpen) : ''}</Text>
-                <Text style={styles.modalSub}>
-                  {bucketTotalCount} drug{bucketTotalCount === 1 ? '' : 's'} • Swipe →
-                  {bucketIds.length > 0 ? `   ${bucketIndex + 1}/${bucketIds.length}` : ''}
-                </Text>
-                {bucketIsTruncated && (
-                  <Text style={styles.modalNote}>Showing {bucketIds.length} of {bucketTotalCount}</Text>
-                )}
+              <View style={styles.modalHeaderLeft}>
+                {bucketView === 'swipe' ? (
+                  <Pressable
+                    onPress={() => setBucketView('list')}
+                    style={({ pressed }) => [styles.modalBack, pressed ? { opacity: 0.85 } : null]}
+                    hitSlop={8}
+                  >
+                    <ChevronLeft size={18} color={Colors.textSecondary} />
+                    <Text style={styles.modalBackText}>List</Text>
+                  </Pressable>
+                ) : null}
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalTitle}>{bucketOpen ? getBucketLabel(bucketOpen) : ''}</Text>
+                  {bucketView === 'list' ? (
+                    <Text style={styles.modalSub}>
+                      {bucketTotalCount} drug{bucketTotalCount === 1 ? '' : 's'} • Tap a drug to swipe
+                    </Text>
+                  ) : (
+                    <Text style={styles.modalSub}>
+                      Swipe → {bucketIdsAll.length > 0 ? `${bucketIndex + 1}/${bucketIdsAll.length}` : ''}
+                    </Text>
+                  )}
+                </View>
               </View>
 
               <Pressable onPress={closeBucket} style={styles.modalClose} hitSlop={8}>
@@ -396,16 +452,28 @@ export default React.memo(function DrugMasteryCard({ drugMastery, onViewAll }: D
               </Pressable>
             </View>
 
-            <FlatList
-              data={bucketIds}
-              keyExtractor={(id) => id}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              renderItem={renderBucketCard}
-              onMomentumScrollEnd={onBucketScrollEnd}
-              bounces={false}
-            />
+            {bucketView === 'list' ? (
+              <FlatList
+                data={bucketIdsAll}
+                keyExtractor={(id) => id}
+                renderItem={renderBucketListRow}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ padding: 14, paddingBottom: 18 }}
+              />
+            ) : (
+              <FlatList
+                data={bucketIdsAll}
+                keyExtractor={(id) => id}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                renderItem={renderBucketCard}
+                onMomentumScrollEnd={onBucketScrollEnd}
+                bounces={false}
+                initialScrollIndex={Math.min(bucketIndex, Math.max(0, bucketIdsAll.length - 1))}
+                getItemLayout={(_, index) => ({ length: modalWidth, offset: modalWidth * index, index })}
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -641,6 +709,29 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.surfaceAlt,
   },
+  modalHeaderLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingRight: 10,
+  },
+  modalBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+  },
+  modalBackText: {
+    fontSize: 13,
+    fontWeight: '800' as const,
+    color: Colors.textSecondary,
+  },
   modalTitle: {
     fontSize: 18,
     fontWeight: '900' as const,
@@ -652,12 +743,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 3,
   },
-  modalNote: {
-    fontSize: 11,
-    fontWeight: '700' as const,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
   modalClose: {
     width: 34,
     height: 34,
@@ -667,6 +752,45 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  bucketListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.background,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    marginBottom: 10,
+  },
+  bucketListBrand: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: Colors.text,
+  },
+  bucketListGeneric: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  bucketListRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+    minWidth: 86,
+  },
+  bucketListUnseenBar: {
+    width: 70,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E2E8F0',
+  },
+  bucketListLabel: {
+    fontSize: 10,
+    fontWeight: '800' as const,
   },
 
   bucketPage: {

@@ -88,6 +88,22 @@ export default React.memo(function XPComparisonGraph({
       start.setDate(start.getDate() - 6);
       const startISO = start.toISOString();
 
+      // Build a stable 7-day axis (LOCAL dates) so the chart stays correct even if the
+      // backend ever returns <7 rows or returns rows out of order.
+      const axisLabels = makeLastNDaysLabels(7);
+
+      // Map YYYY-MM-DD -> index (0..6)
+      const dateKey = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      const axisIndex = new Map<string, number>();
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const k = dateKey(d);
+        axisIndex.set(k, i);
+      }
+
       setRemoteLoading(true);
 
       try {
@@ -100,26 +116,22 @@ export default React.memo(function XPComparisonGraph({
 
         const rows = Array.isArray(data) ? data : [];
 
-        // Expecting 7 rows (one per day)
-        if (rows.length !== 7) {
-          console.log('[XPComparisonGraph] Unexpected rows length:', rows.length);
-          if (!cancelled) setRemote(null);
-          return;
+        // Initialize to 0 for all 7 days
+        const yourSeries = new Array<number>(7).fill(0);
+        const friendSeries = new Array<number>(7).fill(0);
+
+        for (const r of rows) {
+          const ts = (r as any)?.day_start;
+          const d = ts ? new Date(ts) : null;
+          if (!d) continue;
+          const idx = axisIndex.get(dateKey(d));
+          if (idx == null) continue;
+          yourSeries[idx] = safeNum((r as any)?.your_xp);
+          friendSeries[idx] = safeNum((r as any)?.friend_xp);
         }
 
-        const labels = rows.map((r: any) => {
-          const ts = r.day_start;
-          const d = ts ? new Date(ts) : null;
-          return d
-            ? { dow: DAY_NAMES[d.getDay()] ?? '', mmdd: formatMMDD(d) }
-            : { dow: '', mmdd: '' };
-        });
-
-        const yourSeries = rows.map((r: any) => safeNum(r.your_xp));
-        const friendSeries = rows.map((r: any) => safeNum(r.friend_xp));
-
         if (!cancelled) {
-          setRemote({ labels, yourSeries, friendSeries });
+          setRemote({ labels: axisLabels, yourSeries, friendSeries });
         }
       } catch (e: any) {
         console.log('[XPComparisonGraph] Daily breakdown RPC failed:', e?.message ?? e);
