@@ -2,10 +2,11 @@ import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Heart, Coins, Play, Sparkles, ShoppingBag, Zap, Gift, Shield, Clock } from 'lucide-react-native';
+import { Heart, Coins, Play, Sparkles, ShoppingBag, Gift, Shield, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useProgress } from '@/contexts/ProgressContext';
+import XPIcon from '@/components/XPIcon';
 
 interface ShopItemProps {
   icon: React.ReactNode;
@@ -188,7 +189,7 @@ export default function ShopScreen() {
           </View>
           <View style={styles.walletDivider} />
           <View style={styles.walletItem}>
-            <Zap size={20} color="#FFFFFF" />
+            <XPIcon size={20} />
             <Text style={styles.walletValue}>{progress.stats.xpTotal}</Text>
             <Text style={styles.walletLabel}>XP</Text>
           </View>
@@ -306,7 +307,7 @@ export default function ShopScreen() {
         <View style={styles.earnCard}>
           <View style={styles.earnRow}>
             <View style={styles.earnIcon}>
-              <Zap size={20} color={Colors.gold} />
+              <XPIcon size={20} />
             </View>
             <View style={styles.earnInfo}>
               <Text style={styles.earnTitle}>Perfect Score Bonus</Text>
@@ -354,9 +355,9 @@ const styles = StyleSheet.create({
   walletRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'rgba(240, 249, 255, 0.22)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
     borderRadius: 20,
     marginTop: 16,
     paddingVertical: 14,
