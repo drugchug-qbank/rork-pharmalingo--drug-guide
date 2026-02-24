@@ -64,26 +64,34 @@ export default function LearnScreen() {
       >
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
-            <MascotAnimated mood="waving" size={48} />
+            {/* Avatar placeholder (user-customizable in the future) */}
+            <MascotAnimated mood="waving" size={58} />
             <View>
               <Text style={styles.headerTitle}>PharmaLingo</Text>
               <Text style={styles.headerSubtitle}>Top 300 Drugs</Text>
             </View>
           </View>
+        </View>
 
-          <View style={styles.headerStats}>
-            <StreakPill value={streakCount} size="md" onDark />
+        {/* Move badges UNDER the title so they never get pushed off-screen */}
+        <View style={styles.headerStatsRow}>
+          <StreakPill value={streakCount} size="md" onDark />
 
-            <View style={styles.statBadge}>
-              <Heart size={16} color="#FF6B6B" fill="#FF6B6B" />
-              <Text style={styles.statText}>{progress.stats.hearts}</Text>
-            </View>
-
-            <Pressable onPress={() => router.push('/(tabs)/shop')} style={styles.coinBadge}>
-              <Coins size={16} color={Colors.gold} />
-              <Text style={styles.statText}>{progress.stats.coins}</Text>
-            </Pressable>
+          <View style={styles.statPill}>
+            {/* Match flame icon size in StreakPill (md -> 24) */}
+            <Heart size={24} color="#FF6B6B" fill="#FF6B6B" />
+            <Text style={styles.statText}>{progress.stats.hearts}</Text>
           </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open Shop"
+            onPress={() => router.push('/(tabs)/shop')}
+            style={styles.statPill}
+          >
+            <Coins size={22} color={Colors.gold} />
+            <Text style={styles.statText}>{progress.stats.coins}</Text>
+          </Pressable>
         </View>
 
         <View style={styles.xpBar}>
@@ -175,11 +183,11 @@ const styles = StyleSheet.create({
 
   headerContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
   },
 
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
 
   headerTitle: {
     fontSize: 28,
@@ -194,29 +202,29 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  headerStats: { flexDirection: 'row', gap: 6 },
-
-  statBadge: {
+  headerStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    gap: 4,
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
   },
-  coinBadge: {
+
+  statPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    gap: 4,
+    paddingVertical: 7,
+    borderRadius: 16,
+    gap: 6,
   },
   statText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' as const },
 
-  xpBar: { marginTop: 14 },
+  xpBar: { marginTop: 12 },
   xpBarTrack: {
     height: 8,
     backgroundColor: 'rgba(255,255,255,0.2)',
