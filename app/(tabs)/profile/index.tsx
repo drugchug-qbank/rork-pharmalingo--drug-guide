@@ -18,7 +18,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Flame,
   Target,
   BookOpen,
   Award,
@@ -47,6 +46,7 @@ import { chapters } from '@/constants/chapters';
 import { schools, School } from '@/constants/schoolsData';
 import ProgressBar from '@/components/ProgressBar';
 import MascotAnimated from '@/components/MascotAnimated';
+import StreakFlameIcon from '@/components/StreakFlameIcon';
 
 type StreakStatus = 'extended' | 'at_risk' | 'lost';
 
@@ -659,14 +659,9 @@ month_end: String(r.month_end ?? ''),
 
         <View style={styles.headerStatsRow}>
           <View style={styles.headerStat}>
-            <LinearGradient
-              colors={['#FDBA74', '#F97316', '#EF4444']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.headerStreakIcon}
-            >
-              <Flame size={16} color="#FFFFFF" strokeWidth={2.6} />
-            </LinearGradient>
+            <View style={styles.headerStatIcon}>
+              <StreakFlameIcon size={20} />
+            </View>
             <Text style={styles.headerStatValue}>{streakCurrent}</Text>
             <Text style={styles.headerStatLabel}>Streak</Text>
           </View>
@@ -936,6 +931,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
     borderRadius: 20,
     marginTop: 16,
     paddingVertical: 14,
@@ -952,13 +949,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.22)',
-  },
-  headerStreakIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   headerStatValue: { fontSize: 20, fontWeight: '900' as const, color: '#FFFFFF' },
   headerStatLabel: { fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '600' as const },
@@ -999,8 +989,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,

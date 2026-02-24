@@ -1,9 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Flame } from 'lucide-react-native';
 
 import Colors from '@/constants/colors';
+import StreakFlameIcon from '@/components/StreakFlameIcon';
 
 type StreakPillSize = 'sm' | 'md' | 'lg';
 
@@ -19,18 +18,20 @@ export type StreakPillProps = {
   accessibilityLabel?: string;
 };
 
-const SIZE_MAP: Record<StreakPillSize, {
-  px: number;
-  py: number;
-  gap: number;
-  icon: number;
-  flame: number;
-  font: number;
-  radius: number;
-}> = {
-  sm: { px: 10, py: 6, gap: 6, icon: 20, flame: 12, font: 14, radius: 14 },
-  md: { px: 12, py: 7, gap: 7, icon: 24, flame: 14, font: 15, radius: 16 },
-  lg: { px: 14, py: 9, gap: 8, icon: 28, flame: 16, font: 16, radius: 18 },
+const SIZE_MAP: Record<
+  StreakPillSize,
+  {
+    px: number;
+    py: number;
+    gap: number;
+    icon: number;
+    font: number;
+    radius: number;
+  }
+> = {
+  sm: { px: 10, py: 6, gap: 6, icon: 20, font: 14, radius: 14 },
+  md: { px: 12, py: 7, gap: 7, icon: 24, font: 15, radius: 16 },
+  lg: { px: 14, py: 9, gap: 8, icon: 28, font: 16, radius: 18 },
 };
 
 export default function StreakPill({
@@ -58,20 +59,16 @@ export default function StreakPill({
         style,
       ]}
     >
-      <LinearGradient
-        colors={['#FDBA74', '#F97316', '#EF4444']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+      <View
         style={{
           width: s.icon,
           height: s.icon,
-          borderRadius: s.icon / 2,
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Flame size={s.flame} color="#FFFFFF" strokeWidth={2.6} />
-      </LinearGradient>
+        <StreakFlameIcon size={s.icon} />
+      </View>
 
       <Text style={[styles.value, onDark ? styles.valueOnDark : styles.valueOnLight, { fontSize: s.font }]}>
         {value}

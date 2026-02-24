@@ -21,7 +21,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Trophy,
   Users,
-  Flame,
   Zap,
   Crown,
   ChevronRight,
@@ -46,6 +45,7 @@ import XPComparisonGraph from '@/components/XPComparisonGraph';
 import MascotAnimated from '@/components/MascotAnimated';
 import LeagueWeekResultsModal from '@/components/LeagueResultsModal';
 import ProfessionLeaderboardTab from '@/components/ProfessionLeaderboardTab';
+import StreakFlameIcon from '@/components/StreakFlameIcon';
 
 interface LeagueRow {
   user_id: string;
@@ -669,7 +669,7 @@ const handleSendRequestToUsername = useCallback(
         </View>
 
         <View style={styles.streakBadge}>
-          <Flame size={12} color={Colors.gold} />
+          <StreakFlameIcon size={14} />
           <Text style={styles.streakText}>{row.streak ?? 0}</Text>
         </View>
       </View>
@@ -809,7 +809,7 @@ const renderFriendItem = (friend: FriendRow, index: number) => {
 
             <View style={styles.friendRight}>
               <View style={styles.friendStreakBadgeLarge}>
-                <Flame size={14} color="#FF6B6B" />
+                <StreakFlameIcon size={16} />
                 <Text style={styles.friendStreakNumLarge}>{friend.streak}</Text>
                 <Text style={styles.friendStreakSuffix}>d</Text>
               </View>
@@ -994,14 +994,9 @@ const renderLoadingState = (label = 'Loading...') => (
           </View>
           <View style={styles.yourRankDivider} />
           <View style={styles.yourRankRight}>
-            <LinearGradient
-              colors={['#FDBA74', '#F97316', '#EF4444']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.streakIconCircle}
-            >
-              <Flame size={14} color="#FFFFFF" strokeWidth={2.6} />
-            </LinearGradient>
+            <View style={styles.streakIconCircle}>
+              <StreakFlameIcon size={18} />
+            </View>
             <Text style={styles.yourXpValue}>{progress.stats.streakCurrent}</Text>
             <Text style={styles.yourXpLabel}>Streak</Text>
           </View>
@@ -1134,7 +1129,7 @@ const renderLoadingState = (label = 'Loading...') => (
                             </Text>
                             <Text style={styles.podiumXp}>{(u.xp_this_week ?? 0).toLocaleString()} XP</Text>
                             <View style={styles.podiumStreakBadge}>
-                              <Flame size={11} color="#FF6B6B" />
+                              <StreakFlameIcon size={14} />
                               <Text style={styles.podiumStreakText}>{u.streak ?? 0}</Text>
                             </View>
                           </View>
@@ -1452,6 +1447,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
   countdownText: {
     fontSize: 13,
@@ -1468,6 +1465,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
   },
   yourRankLeft: { flex: 1, alignItems: 'center' },
   yourRankLabel: { fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const },
@@ -1480,6 +1479,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.30)',
   },
   yourXpValue: { fontSize: 18, fontWeight: '900' as const, color: '#FFFFFF' },
   yourXpLabel: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const },
@@ -1492,7 +1494,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     padding: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderColor: 'rgba(255,255,255,0.55)',
     marginBottom: 6,
   },
   tab: {
@@ -1505,7 +1507,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.35)',
   },
   tabActive: {
     backgroundColor: '#FFFFFF',
@@ -1582,8 +1584,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 10,
     backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
     borderLeftWidth: 4,
     borderLeftColor: Colors.primary,
     shadowColor: '#000',
@@ -1626,8 +1628,8 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 10,
     paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
@@ -1689,8 +1691,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
   },
   leaderItemTop3: { borderLeftWidth: 3 },
   leaderItemMe: { borderColor: Colors.primary + '50', backgroundColor: Colors.primaryLight + '40' },
@@ -1757,8 +1759,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
   },
   addFriendTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   addFriendTitle: { fontSize: 15, fontWeight: '900' as const, color: Colors.text },
@@ -1892,8 +1894,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1917,8 +1919,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
   },
   friendItemSelected: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
 
@@ -1974,8 +1976,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
     borderStyle: 'dashed',
   },
   noSchoolInfo: { flex: 1 },
@@ -1992,8 +1994,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
   },
   schoolItemHighlight: { borderColor: Colors.primary + '50', backgroundColor: Colors.primaryLight + '80' },
 
