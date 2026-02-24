@@ -129,6 +129,50 @@ function normalizeHandle(input: string): string {
 }
 
 
+
+type OutlinedTextProps = {
+  text: string;
+  style?: any;
+  strokeColor?: string;
+  strokeWidth?: number;
+};
+
+function OutlinedText({ text, style, strokeColor = '#0B0B0B', strokeWidth = 1.25 }: OutlinedTextProps) {
+  // Simple cross-platform outline via layered text (works on iOS/Android/Web)
+  const offsets: Array<[number, number]> = [
+    [-1, 0],
+    [1, 0],
+    [0, -1],
+    [0, 1],
+    [-1, -1],
+    [-1, 1],
+    [1, -1],
+    [1, 1],
+  ];
+
+  return (
+    <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+      {offsets.map(([dx, dy], i) => (
+        <Text
+          key={`stroke-${i}`}
+          style={[
+            style,
+            {
+              position: 'absolute',
+              left: dx * strokeWidth,
+              top: dy * strokeWidth,
+              color: strokeColor,
+            },
+          ]}
+        >
+          {text}
+        </Text>
+      ))}
+      <Text style={style}>{text}</Text>
+    </View>
+  );
+}
+
 export default function LeaderboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -965,9 +1009,9 @@ const renderLoadingState = (label = 'Loading...') => (
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.headerTitle}>Leaderboard</Text>
-            <View style={styles.tierHeaderRow}>
+            <View style={styles.tierPill}>
               <Text style={styles.tierHeaderEmoji}>{tierConfig.emoji}</Text>
-              <Text style={[styles.headerSub, { color: tierConfig.color }]}>{currentTier} League</Text>
+              <Text style={[styles.tierPillText, { color: tierConfig.color }]}>{currentTier} League</Text>
             </View>
           </View>
           <MascotAnimated mood="waving" size={64} />
@@ -983,8 +1027,13 @@ const renderLoadingState = (label = 'Loading...') => (
 
         <View style={styles.yourRankCard}>
           <View style={styles.yourRankLeft}>
+            <OutlinedText
+              text={`#${leagueRank}`}
+              style={styles.yourRankValue}
+              strokeColor="#0B0B0B"
+              strokeWidth={1.35}
+            />
             <Text style={styles.yourRankLabel}>League Rank</Text>
-            <Text style={styles.yourRankValue}>#{leagueRank}</Text>
           </View>
           <View style={styles.yourRankDivider} />
           <View style={styles.yourRankRight}>
@@ -1437,6 +1486,21 @@ const styles = StyleSheet.create({
   tierHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
   tierHeaderEmoji: { fontSize: 16 },
 
+  tierPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    marginTop: 6,
+  },
+  tierPillText: { fontSize: 12, fontWeight: '900' as const },
+
   countdownCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1468,8 +1532,8 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: 'rgba(255,255,255,0.95)',
   },
-  yourRankLeft: { flex: 1, alignItems: 'center' },
-  yourRankLabel: { fontSize: 11, color: 'rgba(255,255,255,0.82)', fontWeight: '700' as const },
+  yourRankLeft: { flex: 1, alignItems: 'center', gap: 2 },
+  yourRankLabel: { fontSize: 10, color: 'rgba(255,255,255,0.95)', fontWeight: '800' as const },
   yourRankValue: { fontSize: 24, fontWeight: '900' as const, color: Colors.gold },
   yourRankDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 12 },
   yourRankRight: { flex: 1, alignItems: 'center', gap: 2 },
@@ -1484,7 +1548,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.90)',
   },
   yourXpValue: { fontSize: 18, fontWeight: '900' as const, color: '#FFFFFF' },
-  yourXpLabel: { fontSize: 10, color: 'rgba(255,255,255,0.82)', fontWeight: '700' as const },
+  yourXpLabel: { fontSize: 10, color: 'rgba(255,255,255,0.95)', fontWeight: '800' as const },
 
   // ✅ Tabs POP more: active is a bright pill
   tabBar: {
