@@ -355,15 +355,9 @@ const styles = StyleSheet.create({
   walletRow: {
     flexDirection: 'row',
     alignItems: 'center',
-<<<<<<< HEAD
     backgroundColor: 'rgba(240, 249, 255, 0.34)',
     borderWidth: 2.5,
     borderColor: 'rgba(255,255,255,0.95)',
-=======
-    backgroundColor: 'rgba(240, 249, 255, 0.22)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.85)',
->>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
     borderRadius: 20,
     marginTop: 16,
     paddingVertical: 14,

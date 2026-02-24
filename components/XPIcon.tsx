@@ -5,7 +5,6 @@ import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
  * XP bolt icon (consistent across the app).
  * Inspired by classic gamified "XP lightning" visuals: bold outline + warm yellow fill.
  */
-<<<<<<< HEAD
 
 // Render the XP icon ~20% larger than the provided size so it reads better next
 // to numbers across the app (more like a reward badge than a thin glyph).
@@ -18,14 +17,6 @@ export default function XPIcon({ size = 18 }: { size?: number }) {
 
   return (
     <Svg width={scaled} height={scaled} viewBox="0 0 64 64" fill="none">
-=======
-export default function XPIcon({ size = 18 }: { size?: number }) {
-  const isSmall = size <= 16;
-  const strokeWidth = isSmall ? 3 : 4;
-
-  return (
-    <Svg width={size} height={size} viewBox="0 0 64 64" fill="none">
->>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
       <Defs>
         <LinearGradient id="xpBoltFill" x1="18" y1="4" x2="46" y2="60" gradientUnits="userSpaceOnUse">
           <Stop offset="0" stopColor="#FFF7B2" />
