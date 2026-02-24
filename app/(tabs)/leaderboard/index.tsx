@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  RefreshControl,
   Pressable,
   Animated,
   ActivityIndicator,
@@ -11,9 +12,11 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Trophy,
@@ -71,7 +74,9 @@ interface FriendRow {
   avatar_url: string | null;
   weekly_xp: number;
   streak: number;
+  mutual_count?: number; // optional for backward compatibility
 }
+
 
 interface FriendRequestRow {
   request_id: string;
@@ -81,6 +86,22 @@ interface FriendRequestRow {
   display_name: string;
   avatar_url: string | null;
   created_at: string;
+}
+
+
+interface SearchUserRow {
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  relationship:
+    | 'none'
+    | 'already_friends'
+    | 'outgoing_pending'
+    | 'incoming_pending'
+    | 'blocked'
+    | 'declined'
+    | string;
 }
 
 const TIER_CONFIG: Record<
@@ -99,20 +120,44 @@ function safeNum(v: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+
+function normalizeHandle(input: string): string {
+  const raw = (input ?? '').trim();
+  if (!raw) return '';
+  const noAt = raw.startsWith('@') ? raw.slice(1) : raw;
+  return noAt.trim().toLowerCase();
+}
+
+
 export default function LeaderboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { progress, leagueRank, leagueWeekResult, dismissLeagueResult } = useProgress();
   const { session, isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
+  const isFocused = useIsFocused();
 
   const [activeTab, setActiveTab] = useState<Tab>('league');
+
+  // Pull-to-refresh
+  const [pullRefreshing, setPullRefreshing] = useState(false);
 
   // Friends state
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
   const [addUsername, setAddUsername] = useState<string>('');
   const [sendingRequest, setSendingRequest] = useState<boolean>(false);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [searchSendingUsername, setSearchSendingUsername] = useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
+
+  const normalizedSearchInput = useMemo(() => normalizeHandle(addUsername), [addUsername]);
+
+  // Debounce search to avoid spamming Supabase on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(normalizedSearchInput), 250);
+    return () => clearTimeout(t);
+  }, [normalizedSearchInput]);
+
 
   const contentFade = useRef(new Animated.Value(1)).current;
   const [weekCountdown, setWeekCountdown] = useState<string>('');
@@ -178,6 +223,14 @@ export default function LeaderboardScreen() {
     return () => subscription.remove();
   }, [queryClient]);
 
+  // Refresh when the Leaderboard tab/screen becomes focused (user returns from Learn/Practice/etc.)
+  useEffect(() => {
+    if (!isFocused || !session) return;
+    queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+    queryClient.invalidateQueries({ queryKey: ['friends'] });
+    queryClient.invalidateQueries({ queryKey: ['profession'] });
+  }, [isFocused, session, queryClient]);
+
   // ---------------------------
   // League Query
   // ---------------------------
@@ -191,7 +244,7 @@ export default function LeaderboardScreen() {
         const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
         return {
           user_id: row.user_id ?? row.id ?? '',
-          display_name: row.display_name ?? row.username ?? row.email ?? 'Unknown',
+          display_name: row.display_name ?? row.username ?? 'Unknown',
           avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
           xp_this_week: isNaN(xpValue) ? 0 : xpValue,
           level: Number(row.level ?? row.lvl ?? 1),
@@ -203,9 +256,10 @@ export default function LeaderboardScreen() {
 
       return rows;
     },
-    enabled: !!session && activeTab === 'league',
+    enabled: !!session && isFocused && activeTab === 'league',
     staleTime: 30_000,
     refetchOnMount: 'always' as const,
+    refetchInterval: isFocused && activeTab === 'league' ? 12_000 : false,
     retry: 2,
   });
 
@@ -232,33 +286,75 @@ export default function LeaderboardScreen() {
 
       return rows;
     },
-    enabled: !!session && activeTab === 'school',
+    enabled: !!session && isFocused && activeTab === 'school',
     staleTime: 30_000,
     refetchOnMount: 'always' as const,
+    refetchInterval: isFocused && activeTab === 'school' ? 20_000 : false,
     retry: 2,
   });
 
   // ---------------------------
   // Friends Queries
   // ---------------------------
+
+  const searchUsersQuery = useQuery<SearchUserRow[]>({
+    queryKey: ['friends', 'search', debouncedSearch],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('search_users', { p_query: debouncedSearch });
+      if (error) throw error;
+
+      const rows = Array.isArray(data) ? data : [];
+      return rows.map((r: any) => ({
+        user_id: String(r.user_id),
+        username: String(r.username ?? ''),
+        display_name: r.display_name ?? null,
+        avatar_url: r.avatar_url ?? null,
+        relationship: String(r.relationship ?? 'none'),
+      })) as SearchUserRow[];
+    },
+    enabled: !!session && isFocused && activeTab === 'friends' && debouncedSearch.length >= 2,
+    staleTime: 5_000,
+    refetchOnMount: 'always' as const,
+    retry: 0,
+  });
+
   const friendsQuery = useQuery<FriendRow[]>({
     queryKey: ['friends', 'list'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_my_friends');
-      if (error) throw error;
+      // Prefer v2 (includes mutual_count). Fallback to v1 if not deployed yet.
+      const v2 = await supabase.rpc('get_my_friends_v2');
+      if (!v2.error) {
+        const rows = Array.isArray(v2.data) ? v2.data : [];
+        return rows.map((r: any) => ({
+          friend_user_id: String(r.friend_user_id),
+          username: String(r.username ?? ''),
+          display_name: String(r.display_name ?? r.username ?? 'Friend'),
+          avatar_url: r.avatar_url ?? null,
+          weekly_xp: safeNum(r.weekly_xp),
+          streak: safeNum(r.streak),
+          mutual_count: safeNum(r.mutual_count),
+        })) as FriendRow[];
+      }
 
-      return (data ?? []).map((r: any) => ({
+      // v1 fallback
+      const v1 = await supabase.rpc('get_my_friends');
+      if (v1.error) throw v1.error;
+
+      const rows = Array.isArray(v1.data) ? v1.data : [];
+      return rows.map((r: any) => ({
         friend_user_id: String(r.friend_user_id),
         username: String(r.username ?? ''),
         display_name: String(r.display_name ?? r.username ?? 'Friend'),
         avatar_url: r.avatar_url ?? null,
         weekly_xp: safeNum(r.weekly_xp),
         streak: safeNum(r.streak),
+        mutual_count: 0,
       })) as FriendRow[];
     },
-    enabled: !!session && activeTab === 'friends',
+    enabled: !!session && isFocused && activeTab === 'friends',
     staleTime: 15_000,
     refetchOnMount: 'always' as const,
+    refetchInterval: isFocused && activeTab === 'friends' ? 15_000 : false,
     retry: 1,
   });
 
@@ -278,11 +374,31 @@ export default function LeaderboardScreen() {
         created_at: String(r.created_at ?? ''),
       })) as FriendRequestRow[];
     },
-    enabled: !!session && activeTab === 'friends',
+    enabled: !!session && isFocused && activeTab === 'friends',
     staleTime: 10_000,
     refetchOnMount: 'always' as const,
+    refetchInterval: isFocused && activeTab === 'friends' ? 15_000 : false,
     retry: 1,
   });
+
+  const handlePullRefresh = useCallback(async () => {
+    if (!session) return;
+    setPullRefreshing(true);
+    try {
+      if (activeTab === 'league') {
+        await leagueQuery.refetch();
+      } else if (activeTab === 'school') {
+        await schoolQuery.refetch();
+      } else if (activeTab === 'friends') {
+        await Promise.all([friendsQuery.refetch(), friendRequestsQuery.refetch()]);
+      } else if (activeTab === 'profession') {
+        // Profession tab lives in a child component; invalidating this key triggers it to refresh.
+        await queryClient.invalidateQueries({ queryKey: ['profession'] });
+      }
+    } finally {
+      setPullRefreshing(false);
+    }
+  }, [session, activeTab, leagueQuery, schoolQuery, friendsQuery, friendRequestsQuery, queryClient]);
 
   const incomingRequests = useMemo(
     () => (friendRequestsQuery.data ?? []).filter((r) => r.direction === 'incoming'),
@@ -307,7 +423,7 @@ export default function LeaderboardScreen() {
   // Friends Actions
   // ---------------------------
   const handleSendRequest = useCallback(async () => {
-    const username = addUsername.trim();
+    const username = normalizeHandle(addUsername);
     if (!username) {
       Alert.alert('Add Friend', 'Type a username like @Test31');
       return;
@@ -332,12 +448,45 @@ export default function LeaderboardScreen() {
       }
 
       refreshFriends();
+      queryClient.invalidateQueries({ queryKey: ['friends', 'search'] });
     } catch (e: any) {
       Alert.alert('Could not send request', e?.message ?? String(e));
     } finally {
       setSendingRequest(false);
     }
-  }, [addUsername, refreshFriends]);
+  }, [addUsername, refreshFriends, queryClient]);
+
+const handleSendRequestToUsername = useCallback(
+    async (username: string) => {
+      const handle = normalizeHandle(username);
+      if (!handle) return;
+
+      setSearchSendingUsername(handle);
+      try {
+        const { data, error } = await supabase.rpc('send_friend_request', { p_username: handle });
+        if (error) throw error;
+
+        // Quiet success UX (no alert), but refresh lists + suggestions.
+        setAddUsername('');
+        refreshFriends();
+        queryClient.invalidateQueries({ queryKey: ['friends', 'search'] });
+
+        // If it wasn't actually sent, give a minimal hint.
+        const status = (data as any)?.status;
+        if (status === 'already_friends') {
+          Alert.alert('Already friends', 'You are already friends with that user.');
+        } else if (status === 'incoming_request_exists') {
+          Alert.alert('Request waiting', 'They already sent you a request. Accept it below.');
+        }
+      } catch (e: any) {
+        Alert.alert('Could not send request', e?.message ?? String(e));
+      } finally {
+        setSearchSendingUsername(null);
+      }
+    },
+    [refreshFriends, queryClient]
+  );
+
 
   const handleRespondRequest = useCallback(
     async (requestId: string, accept: boolean) => {
@@ -412,13 +561,20 @@ export default function LeaderboardScreen() {
       contentFade.setValue(0);
       setActiveTab(tab);
       setSelectedFriendId(null);
+
+      // Make the target tab feel “live” by forcing a fresh fetch right away.
+      if (tab === 'league') queryClient.invalidateQueries({ queryKey: ['leaderboard', 'league'] });
+      if (tab === 'school') queryClient.invalidateQueries({ queryKey: ['leaderboard', 'school'] });
+      if (tab === 'friends') queryClient.invalidateQueries({ queryKey: ['friends'] });
+      if (tab === 'profession') queryClient.invalidateQueries({ queryKey: ['profession'] });
+
       Animated.timing(contentFade, {
         toValue: 1,
         duration: 250,
         useNativeDriver: true,
       }).start();
     },
-    [contentFade]
+    [contentFade, queryClient]
   );
 
   const proximityMessage = useMemo(() => {
@@ -520,58 +676,155 @@ export default function LeaderboardScreen() {
     );
   };
 
-  const renderFriendItem = (friend: FriendRow, index: number) => {
-    const isSelected = selectedFriendId === friend.friend_user_id;
-    const label = friend.display_name || friend.username;
+    
+  const renderSearchSuggestion = (u: SearchUserRow) => {
+    const label = String(u.display_name ?? u.username ?? 'User');
+    const rel = String(u.relationship ?? 'none');
+    const isSending = searchSendingUsername === normalizeHandle(u.username);
+
+    const right = (() => {
+      if (rel === 'already_friends') {
+        return (
+          <View style={styles.suggestPillOk}>
+            <CheckCircle2 size={14} color={Colors.success} />
+            <Text style={styles.suggestPillOkText}>Friends</Text>
+          </View>
+        );
+      }
+
+      if (rel === 'outgoing_pending') {
+        return (
+          <View style={styles.suggestPillMuted}>
+            <Clock size={14} color={Colors.textSecondary} />
+            <Text style={styles.suggestPillMutedText}>Requested</Text>
+          </View>
+        );
+      }
+
+      if (rel === 'incoming_pending') {
+        return (
+          <View style={styles.suggestPillWarn}>
+            <AlertTriangle size={14} color={Colors.warning} />
+            <Text style={styles.suggestPillWarnText}>Incoming</Text>
+          </View>
+        );
+      }
+
+      if (rel === 'blocked') {
+        return (
+          <View style={styles.suggestPillMuted}>
+            <Shield size={14} color={Colors.textSecondary} />
+            <Text style={styles.suggestPillMutedText}>Blocked</Text>
+          </View>
+        );
+      }
+
+      return (
+        <Pressable
+          style={[styles.suggestAddBtn, isSending && { opacity: 0.6 }]}
+          disabled={isSending}
+          onPress={() => handleSendRequestToUsername(u.username)}
+        >
+          {isSending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <UserPlus size={16} color="#fff" />
+          )}
+        </Pressable>
+      );
+    })();
 
     return (
-      <View key={friend.friend_user_id}>
+      <View key={u.user_id} style={styles.suggestRow}>
         <Pressable
-          style={[styles.friendItem, isSelected && styles.friendItemSelected]}
-          onPress={() => setSelectedFriendId(isSelected ? null : friend.friend_user_id)}
+          style={styles.suggestLeftPress}
+          onPress={() => setAddUsername(`@${u.username}`)}
         >
-          <View style={styles.rankPill}>
-            <Text style={styles.rankPillText}>{index + 1}</Text>
+          <View style={styles.avatarCircleSmall}>
+            <Text style={styles.avatarTextSmall}>👤</Text>
           </View>
-
-          <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
-            <Text style={styles.avatarText}>👤</Text>
-          </View>
-
-          <View style={styles.friendInfo}>
-            <Text style={styles.userName}>{label}</Text>
-            <View style={styles.friendMeta}>
-              <Zap size={12} color={Colors.gold} />
-              <Text style={styles.userXp}>{friend.weekly_xp.toLocaleString()} XP</Text>
-              <Text style={styles.friendHandle}>@{friend.username}</Text>
-            </View>
-          </View>
-
-          <View style={styles.friendRight}>
-            <View style={styles.friendStreakBadge}>
-              <Flame size={11} color="#FF6B6B" />
-              <Text style={styles.friendStreakNum}>{friend.streak}d</Text>
-            </View>
-            <ChevronRight
-              size={16}
-              color={Colors.textTertiary}
-              style={{ transform: [{ rotate: isSelected ? '90deg' : '0deg' }] }}
-            />
+          <View style={styles.suggestInfo}>
+            <Text style={styles.suggestName} numberOfLines={1}>
+              {label}
+            </Text>
+            <Text style={styles.suggestHandle}>@{u.username}</Text>
           </View>
         </Pressable>
 
-        {isSelected && (
-          <View style={styles.expandedSection}>
-            <View style={styles.friendActionsRow}>
-              <Pressable
-                style={styles.removeFriendBtn}
-                onPress={() => handleRemoveFriend(friend.friend_user_id, label)}
-              >
-                <Trash2 size={16} color={Colors.error} />
-                <Text style={styles.removeFriendText}>Remove Friend</Text>
-              </Pressable>
+        {right}
+      </View>
+    );
+  };
+
+const renderFriendItem = (friend: FriendRow, index: number) => {
+    const isSelected = selectedFriendId === friend.friend_user_id;
+    const label = friend.display_name || friend.username;
+
+    const mutual = safeNum((friend as any).mutual_count);
+    const mutualLabel = mutual === 1 ? '1 mutual' : `${mutual} mutual`;
+
+    const renderRightActions = () => (
+      <Pressable
+        style={styles.swipeActionRemove}
+        onPress={() => handleRemoveFriend(friend.friend_user_id, label)}
+      >
+        <Trash2 size={18} color="#fff" />
+        <Text style={styles.swipeActionText}>Remove</Text>
+      </Pressable>
+    );
+
+    return (
+      <View key={friend.friend_user_id}>
+        <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
+          <Pressable
+            style={[styles.friendItem, isSelected && styles.friendItemSelected]}
+            onPress={() => setSelectedFriendId(isSelected ? null : friend.friend_user_id)}
+          >
+            <View style={styles.rankPill}>
+              <Text style={styles.rankPillText}>{index + 1}</Text>
             </View>
 
+            <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
+              <Text style={styles.avatarText}>👤</Text>
+            </View>
+
+            <View style={styles.friendInfo}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {label}
+              </Text>
+              <Text style={styles.friendHandle}>@{friend.username}</Text>
+
+              <View style={styles.badgeRow}>
+                <View style={styles.badgePill}>
+                  <Zap size={12} color={Colors.gold} />
+                  <Text style={styles.badgeText}>{friend.weekly_xp.toLocaleString()} XP</Text>
+                </View>
+
+                <View style={styles.badgePillMuted}>
+                  <Users size={12} color={Colors.textSecondary} />
+                  <Text style={styles.badgeTextMuted}>{mutualLabel}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.friendRight}>
+              <View style={styles.friendStreakBadgeLarge}>
+                <Flame size={14} color="#FF6B6B" />
+                <Text style={styles.friendStreakNumLarge}>{friend.streak}</Text>
+                <Text style={styles.friendStreakSuffix}>d</Text>
+              </View>
+
+              <ChevronRight
+                size={16}
+                color={Colors.textTertiary}
+                style={{ transform: [{ rotate: isSelected ? '90deg' : '0deg' }] }}
+              />
+            </View>
+          </Pressable>
+        </Swipeable>
+
+        {isSelected && (
+          <View style={styles.expandedSection}>
             <XPComparisonGraph
               yourXp={progress.stats.xpThisWeek ?? 0}
               friendXp={friend.weekly_xp ?? 0}
@@ -587,50 +840,49 @@ export default function LeaderboardScreen() {
     const busy = actionBusyId === r.request_id;
     const label = r.display_name || r.username;
 
-    if (r.direction === 'incoming') {
+    if (r.direction === 'outgoing') {
+      const renderRightActions = () => (
+        <Pressable
+          style={styles.swipeActionCancel}
+          disabled={busy}
+          onPress={() => handleCancelRequest(r.request_id)}
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <XCircle size={18} color="#fff" />
+          )}
+          <Text style={styles.swipeActionText}>Cancel</Text>
+        </Pressable>
+      );
+
       return (
-        <View key={r.request_id} style={styles.requestRow}>
-          <View style={styles.requestLeft}>
-            <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
-              <Text style={styles.avatarText}>👤</Text>
+        <Swipeable
+          key={r.request_id}
+          renderRightActions={renderRightActions}
+          overshootRight={false}
+        >
+          <View style={styles.requestRow}>
+            <View style={styles.requestLeft}>
+              <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
+                <Text style={styles.avatarText}>👤</Text>
+              </View>
+              <View style={styles.requestInfo}>
+                <Text style={styles.requestName}>{label}</Text>
+                <Text style={styles.requestHandle}>@{r.username}</Text>
+              </View>
             </View>
-            <View style={styles.requestInfo}>
-              <Text style={styles.requestName}>{label}</Text>
-              <Text style={styles.requestHandle}>@{r.username}</Text>
+
+            <View style={styles.pendingPill}>
+              <Clock size={12} color={Colors.textSecondary} />
+              <Text style={styles.pendingText}>Pending</Text>
             </View>
           </View>
-
-          <View style={styles.requestButtons}>
-            <Pressable
-              style={[styles.requestBtn, styles.acceptBtn, busy && { opacity: 0.6 }]}
-              disabled={busy}
-              onPress={() => handleRespondRequest(r.request_id, true)}
-            >
-              {busy ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <CheckCircle2 size={16} color="#fff" />
-              )}
-              <Text style={styles.requestBtnText}>Accept</Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.requestBtn, styles.declineBtn, busy && { opacity: 0.6 }]}
-              disabled={busy}
-              onPress={() => handleRespondRequest(r.request_id, false)}
-            >
-              {busy ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <XCircle size={16} color="#fff" />
-              )}
-              <Text style={styles.requestBtnText}>Decline</Text>
-            </Pressable>
-          </View>
-        </View>
+        </Swipeable>
       );
     }
 
+    // Incoming
     return (
       <View key={r.request_id} style={styles.requestRow}>
         <View style={styles.requestLeft}>
@@ -643,19 +895,38 @@ export default function LeaderboardScreen() {
           </View>
         </View>
 
-        <Pressable
-          style={[styles.requestBtn, styles.cancelBtn, busy && { opacity: 0.6 }]}
-          disabled={busy}
-          onPress={() => handleCancelRequest(r.request_id)}
-        >
-          {busy ? <ActivityIndicator size="small" color="#fff" /> : <XCircle size={16} color="#fff" />}
-          <Text style={styles.requestBtnText}>Cancel</Text>
-        </Pressable>
+        <View style={styles.requestActionsCompact}>
+          <Pressable
+            accessibilityLabel={`Accept @${r.username}`}
+            style={[styles.iconActionBtn, styles.iconActionAccept, busy && { opacity: 0.6 }]}
+            disabled={busy}
+            onPress={() => handleRespondRequest(r.request_id, true)}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <CheckCircle2 size={18} color="#fff" />
+            )}
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel={`Decline @${r.username}`}
+            style={[styles.iconActionBtn, styles.iconActionDecline, busy && { opacity: 0.6 }]}
+            disabled={busy}
+            onPress={() => handleRespondRequest(r.request_id, false)}
+          >
+            {busy ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <XCircle size={18} color="#fff" />
+            )}
+          </Pressable>
+        </View>
       </View>
     );
   };
 
-  const renderLoadingState = (label = 'Loading...') => (
+const renderLoadingState = (label = 'Loading...') => (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color={Colors.primary} />
       <Text style={styles.loadingText}>{label}</Text>
@@ -688,7 +959,7 @@ export default function LeaderboardScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={[Colors.secondary, '#1a2744']}
+        colors={[Colors.primary, Colors.primaryDark]}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
         <View style={styles.headerTop}>
@@ -723,7 +994,14 @@ export default function LeaderboardScreen() {
           </View>
           <View style={styles.yourRankDivider} />
           <View style={styles.yourRankRight}>
-            <Flame size={16} color="#FF6B6B" />
+            <LinearGradient
+              colors={['#FDBA74', '#F97316', '#EF4444']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.streakIconCircle}
+            >
+              <Flame size={14} color="#FFFFFF" strokeWidth={2.6} />
+            </LinearGradient>
             <Text style={styles.yourXpValue}>{progress.stats.streakCurrent}</Text>
             <Text style={styles.yourXpLabel}>Streak</Text>
           </View>
@@ -733,15 +1011,15 @@ export default function LeaderboardScreen() {
         <View style={styles.tabBar}>
           {TABS.map(({ key, label, Icon }) => {
             const isActive = activeTab === key;
-            const iconColor = isActive ? Colors.secondary : 'rgba(255,255,255,0.85)';
-            const textColor = isActive ? Colors.secondary : 'rgba(255,255,255,0.85)';
+            const iconColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.85)';
+            const textColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.85)';
             return (
               <Pressable
                 key={key}
                 style={[styles.tab, isActive && styles.tabActive]}
                 onPress={() => switchTab(key)}
               >
-                <Icon size={16} color={iconColor} />
+                <Icon size={18} color={iconColor} />
                 <Text style={[styles.tabText, { color: textColor }, isActive && styles.tabTextActive]}>
                   {label}
                 </Text>
@@ -752,7 +1030,17 @@ export default function LeaderboardScreen() {
       </LinearGradient>
 
       <Animated.View style={[styles.content, { opacity: contentFade }]}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={pullRefreshing}
+              onRefresh={handlePullRefresh}
+              tintColor={Colors.primary}
+            />
+          }
+        >
           {/* ------------------- LEAGUE TAB ------------------- */}
           {activeTab === 'league' ? (
             leagueQuery.isLoading ? (
@@ -766,50 +1054,63 @@ export default function LeaderboardScreen() {
                 {proximityMessage && (
                   <View
                     style={[
-                      styles.proximityBanner,
-                      proximityMessage.type === 'urgent' && styles.proximityUrgent,
-                      proximityMessage.type === 'success' && styles.proximitySuccess,
-                      proximityMessage.type === 'warning' && styles.proximityWarning,
+                      styles.callout,
+                      proximityMessage.type === 'urgent' && styles.calloutUrgent,
+                      proximityMessage.type === 'success' && styles.calloutSuccess,
+                      proximityMessage.type === 'warning' && styles.calloutWarning,
                     ]}
                   >
-                    <Target
-                      size={16}
-                      color={
-                        proximityMessage.type === 'urgent'
-                          ? '#DC2626'
-                          : proximityMessage.type === 'success'
-                            ? '#16A34A'
-                            : proximityMessage.type === 'warning'
-                              ? '#D97706'
-                              : Colors.primary
-                      }
-                    />
-                    <Text
+                    <View
                       style={[
-                        styles.proximityText,
-                        proximityMessage.type === 'urgent' && { color: '#DC2626' },
-                        proximityMessage.type === 'success' && { color: '#16A34A' },
-                        proximityMessage.type === 'warning' && { color: '#D97706' },
+                        styles.calloutIcon,
+                        proximityMessage.type === 'urgent' && { backgroundColor: Colors.errorLight },
+                        proximityMessage.type === 'success' && { backgroundColor: Colors.successLight },
+                        proximityMessage.type === 'warning' && { backgroundColor: Colors.warningLight },
                       ]}
                     >
-                      {proximityMessage.text}
-                    </Text>
+                      <Target
+                        size={18}
+                        color={
+                          proximityMessage.type === 'urgent'
+                            ? Colors.error
+                            : proximityMessage.type === 'success'
+                              ? Colors.success
+                              : proximityMessage.type === 'warning'
+                                ? Colors.warning
+                                : Colors.primary
+                        }
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.calloutTitle}>{proximityMessage.text}</Text>
+                    </View>
                   </View>
                 )}
 
-                <View style={[styles.promoteBanner, { backgroundColor: '#DCFCE7', borderColor: '#22C55E30' }]}>
-                  <TrendingUp size={16} color="#22C55E" />
-                  <Text style={[styles.promoteBannerText, { color: '#16A34A' }]}>
-                    Finish Top 10 to get promoted to{' '}
-                    {currentTier === 'Gold' ? 'Gold (max)' : currentTier === 'Silver' ? 'Gold' : 'Silver'}!
-                  </Text>
+                <View style={[styles.callout, styles.calloutSuccess]}> 
+                  <View style={[styles.calloutIcon, { backgroundColor: Colors.successLight }]}>
+                    <TrendingUp size={18} color={Colors.success} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.calloutTitle}>Promotion</Text>
+                    <Text style={styles.calloutSubtitle}>
+                      Finish Top 10 to get promoted to{' '}
+                      {currentTier === 'Gold' ? 'Gold (max)' : currentTier === 'Silver' ? 'Gold' : 'Silver'}.
+                    </Text>
+                  </View>
                 </View>
 
-                <View style={[styles.promoteBanner, { backgroundColor: '#FEE2E2', borderColor: '#EF444430' }]}>
-                  <AlertTriangle size={16} color={Colors.error} />
-                  <Text style={[styles.promoteBannerText, { color: Colors.error }]}>
-                    Bottom 5 get demoted{currentTier === 'Bronze' ? " (you're safe in Bronze)" : ''}
-                  </Text>
+                <View style={[styles.callout, styles.calloutUrgent]}> 
+                  <View style={[styles.calloutIcon, { backgroundColor: Colors.errorLight }]}>
+                    <AlertTriangle size={18} color={Colors.error} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.calloutTitle}>Demotion</Text>
+                    <Text style={styles.calloutSubtitle}>
+                      Bottom 5 get demoted{currentTier === 'Bronze' ? " (you're safe in Bronze)" : ''}.
+                    </Text>
+                  </View>
                 </View>
 
                 {top3League.length >= 3 && (
@@ -822,22 +1123,38 @@ export default function LeaderboardScreen() {
 
                       return (
                         <View key={u.user_id} style={styles.podiumItem}>
-                          <View style={[styles.podiumAvatar, { borderColor: getMedalColor(rank) }]}>
-                            <Text style={styles.podiumAvatarText}>{u.avatar_emoji || '👤'}</Text>
-                            {rank === 1 && <Crown size={18} color="#FFD700" style={styles.crownIcon} />}
+                          <View style={styles.podiumCard}>
+                            <View style={[styles.podiumAvatar, { borderColor: getMedalColor(rank) }]}> 
+                              <Text style={styles.podiumAvatarText}>{u.avatar_emoji || '👤'}</Text>
+                              {rank === 1 && <Crown size={18} color="#FFD700" style={styles.crownIcon} />}
+                            </View>
+                            <Text style={styles.podiumName} numberOfLines={1}>
+                              {u.display_name}
+                              {u.is_me ? ' (You)' : ''}
+                            </Text>
+                            <Text style={styles.podiumXp}>{(u.xp_this_week ?? 0).toLocaleString()} XP</Text>
+                            <View style={styles.podiumStreakBadge}>
+                              <Flame size={11} color="#FF6B6B" />
+                              <Text style={styles.podiumStreakText}>{u.streak ?? 0}</Text>
+                            </View>
                           </View>
-                          <Text style={styles.podiumName} numberOfLines={1}>
-                            {u.display_name}
-                            {u.is_me ? ' (You)' : ''}
-                          </Text>
-                          <Text style={styles.podiumXp}>{(u.xp_this_week ?? 0).toLocaleString()}</Text>
-                          <View style={styles.podiumStreakBadge}>
-                            <Flame size={11} color="#FF6B6B" />
-                            <Text style={styles.podiumStreakText}>{u.streak ?? 0}</Text>
-                          </View>
-                          <View style={[styles.podiumBar, { height: podiumHeight, backgroundColor: getMedalColor(rank) }]}>
-                            <Text style={styles.podiumRank}>{rank}</Text>
-                          </View>
+
+                          <LinearGradient
+                            colors={
+                              rank === 1
+                                ? ['#FDE68A', '#F59E0B']
+                                : rank === 2
+                                  ? ['#E5E7EB', '#9CA3AF']
+                                  : ['#FED7AA', '#CD7F32']
+                            }
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={[styles.podiumBar, { height: podiumHeight }]}
+                          >
+                            <View style={styles.podiumRankBadge}>
+                              <Text style={styles.podiumRank}>{rank}</Text>
+                            </View>
+                          </LinearGradient>
                         </View>
                       );
                     })}
@@ -873,17 +1190,8 @@ export default function LeaderboardScreen() {
               )
             ) : (
               <>
-                <View style={styles.friendsHeader}>
-                  <MascotAnimated mood="happy" size={50} />
-                  <View style={styles.friendsHeaderText}>
-                    <Text style={styles.friendsTitle}>This Week • You + Friends</Text>
-                    <Text style={styles.friendsSubtitle}>
-                      Add friends by username — tap a friend to compare daily XP.
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.addFriendCard}>
+                
+<View style={styles.addFriendCard}>
                   <View style={styles.addFriendTitleRow}>
                     <UserPlus size={18} color={Colors.primary} />
                     <Text style={styles.addFriendTitle}>Add Friends</Text>
@@ -912,6 +1220,36 @@ export default function LeaderboardScreen() {
                     </Pressable>
                   </View>
 
+                  {normalizedSearchInput.length > 0 ? (
+                    <View style={styles.suggestBox}>
+                      {normalizedSearchInput.length < 2 ? (
+                        <Text style={styles.suggestHintText}>Type 2+ letters to search.</Text>
+                      ) : searchUsersQuery.isLoading ? (
+                        <View style={styles.suggestLoadingRow}>
+                          <ActivityIndicator size="small" color={Colors.primary} />
+                          <Text style={styles.suggestLoadingText}>Searching…</Text>
+                        </View>
+                      ) : searchUsersQuery.isError ? (
+                        <View>
+                          <Text style={styles.suggestErrorText}>
+                            Search unavailable. If this is your first time, add the Supabase RPC{' '}
+                            <Text style={{ fontWeight: '900' as const }}>search_users</Text>.
+                          </Text>
+                          {__DEV__ ? (
+                            <Text style={styles.suggestErrorSubText}>
+                              {String((searchUsersQuery.error as any)?.message ?? searchUsersQuery.error ?? '')}
+                            </Text>
+                          ) : null}
+                        </View>
+                      ) : (searchUsersQuery.data ?? []).length === 0 ? (
+                        <Text style={styles.suggestEmptyText}>No users found.</Text>
+                      ) : (
+                        (searchUsersQuery.data ?? []).map(renderSearchSuggestion)
+                      )}
+                    </View>
+                  ) : null}
+
+
                   <Pressable style={styles.findFriendsBtn} onPress={handleFindMyFriends}>
                     <Users size={16} color="#fff" />
                     <Text style={styles.findFriendsBtnText}>Find My Friends</Text>
@@ -932,12 +1270,14 @@ export default function LeaderboardScreen() {
                 {outgoingRequests.length > 0 ? (
                   <View style={styles.sectionBlock}>
                     <Text style={styles.sectionHeader}>Pending Requests</Text>
+                    <Text style={styles.sectionHintText}>Swipe left to cancel.</Text>
                     {outgoingRequests.map(renderRequestRow)}
                   </View>
                 ) : null}
 
                 <View style={styles.sectionBlock}>
                   <Text style={styles.sectionHeader}>Friends</Text>
+                  <Text style={styles.sectionHintText}>Swipe left on a friend to remove.</Text>
 
                   {friends.length === 0 ? (
                     <View style={styles.emptyState}>
@@ -1134,28 +1474,35 @@ const styles = StyleSheet.create({
   yourRankValue: { fontSize: 24, fontWeight: '900' as const, color: Colors.gold },
   yourRankDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.15)', marginHorizontal: 12 },
   yourRankRight: { flex: 1, alignItems: 'center', gap: 2 },
+  streakIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   yourXpValue: { fontSize: 18, fontWeight: '900' as const, color: '#FFFFFF' },
   yourXpLabel: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const },
 
   // ✅ Tabs POP more: active is a bright pill
   tabBar: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 10,
     backgroundColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 20,
-    padding: 5,
+    borderRadius: 22,
+    padding: 6,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.22)',
     marginBottom: 6,
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 16,
+    gap: 4,
+    paddingVertical: 12,
+    borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -1225,12 +1572,73 @@ const styles = StyleSheet.create({
   proximityWarning: { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' },
   proximityText: { flex: 1, fontSize: 14, fontWeight: '800' as const, color: Colors.primary },
 
-  podium: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 20, paddingTop: 20, gap: 8 },
+  // Modern "callout" cards (replace the old highlighter banners)
+  callout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    marginBottom: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  calloutSuccess: { borderLeftColor: Colors.success },
+  calloutWarning: { borderLeftColor: Colors.warning },
+  calloutUrgent: { borderLeftColor: Colors.error },
+  calloutIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calloutTitle: {
+    fontSize: 13,
+    fontWeight: '900' as const,
+    color: Colors.text,
+    lineHeight: 18,
+  },
+  calloutSubtitle: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+
+  podium: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 18, paddingTop: 18, gap: 10 },
   podiumItem: { flex: 1, alignItems: 'center' },
+  podiumCard: {
+    width: '100%',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    paddingTop: 12,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    elevation: 4,
+    marginBottom: 8,
+  },
   podiumAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 3,
     backgroundColor: Colors.surface,
     alignItems: 'center',
@@ -1241,7 +1649,7 @@ const styles = StyleSheet.create({
   podiumAvatarText: { fontSize: 24 },
   crownIcon: { position: 'absolute', top: -14 },
   podiumName: { fontSize: 12, fontWeight: '700' as const, color: Colors.text, marginBottom: 2 },
-  podiumXp: { fontSize: 11, fontWeight: '800' as const, color: Colors.textSecondary, marginBottom: 3 },
+  podiumXp: { fontSize: 11, fontWeight: '800' as const, color: Colors.textSecondary, marginBottom: 4 },
   podiumStreakBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1253,8 +1661,26 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   podiumStreakText: { fontSize: 11, fontWeight: '800' as const, color: '#92400E' },
-  podiumBar: { width: '80%', borderTopLeftRadius: 10, borderTopRightRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  podiumRank: { fontSize: 20, fontWeight: '900' as const, color: '#FFFFFF' },
+  podiumBar: {
+    width: '100%',
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  podiumRankBadge: {
+    backgroundColor: 'rgba(15,23,42,0.30)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  podiumRank: { fontSize: 18, fontWeight: '900' as const, color: '#FFFFFF' },
 
   leaderItem: {
     flexDirection: 'row',
@@ -1359,6 +1785,90 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addFriendBtnText: { color: '#fff', fontWeight: '900' as const },
+
+  // Search suggestions
+  suggestBox: {
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  suggestLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
+  suggestLoadingText: { color: Colors.textSecondary, fontWeight: '700' as const, fontSize: 12 },
+
+  suggestErrorText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
+  suggestEmptyText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
+
+  suggestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  suggestLeftPress: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  avatarCircleSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F0F6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  avatarTextSmall: { fontSize: 16 },
+  suggestInfo: { flex: 1 },
+  suggestName: { fontSize: 13, fontWeight: '900' as const, color: Colors.text },
+  suggestHandle: { fontSize: 11, fontWeight: '700' as const, color: Colors.textTertiary, marginTop: 2 },
+
+  suggestAddBtn: {
+    backgroundColor: Colors.primary,
+    width: 38,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  suggestPillMuted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  suggestPillMutedText: { fontSize: 11, fontWeight: '900' as const, color: Colors.textSecondary },
+
+  suggestPillOk: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(34,197,94,0.12)',
+  },
+  suggestPillOkText: { fontSize: 11, fontWeight: '900' as const, color: Colors.success },
+
+  suggestPillWarn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(245,158,11,0.14)',
+  },
+  suggestPillWarnText: { fontSize: 11, fontWeight: '900' as const, color: Colors.warning },
+
 
   findFriendsBtn: {
     marginTop: 2,
@@ -1513,4 +2023,124 @@ const styles = StyleSheet.create({
 
   privacyNote: { marginTop: 12, padding: 14, backgroundColor: Colors.surface, borderRadius: 14, borderWidth: 1, borderColor: Colors.surfaceAlt },
   privacyText: { fontSize: 12, fontWeight: '500' as const, color: Colors.textTertiary, lineHeight: 18, textAlign: 'center' as const },
+
+  // --- Friend polish (compact buttons, swipe actions, badges) ---
+  sectionHintText: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textTertiary,
+  },
+
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.goldLight,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  badgePillMuted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: '#92400E',
+  },
+  badgeTextMuted: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: Colors.textSecondary,
+  },
+
+  friendStreakBadgeLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.accentLight,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.25)',
+    gap: 6,
+  },
+  friendStreakNumLarge: {
+    fontSize: 14,
+    fontWeight: '900' as const,
+    color: Colors.accent,
+  },
+  friendStreakSuffix: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: Colors.accent,
+  },
+
+  requestActionsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  iconActionBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconActionAccept: { backgroundColor: Colors.success },
+  iconActionDecline: { backgroundColor: Colors.error },
+
+  pendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  pendingText: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: Colors.textSecondary,
+  },
+
+  swipeActionRemove: {
+    width: 96,
+    backgroundColor: Colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginVertical: 6,
+    borderRadius: 14,
+  },
+  swipeActionCancel: {
+    width: 96,
+    backgroundColor: Colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginVertical: 6,
+    borderRadius: 14,
+  },
+  swipeActionText: {
+    fontSize: 12,
+    fontWeight: '900' as const,
+    color: '#fff',
+  },
+
 });

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { Heart, Flame, Coins } from 'lucide-react-native';
+import { Heart, Coins } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Colors from '@/constants/colors';
@@ -15,6 +15,7 @@ import { useStreakStatus } from '@/hooks/useStreakStatus';
 import ChapterNode from '@/components/ChapterNode';
 import MascotAnimated from '@/components/MascotAnimated';
 import DailyQuestsCard from '@/components/DailyQuestsCard';
+import StreakPill from '@/components/StreakPill';
 
 export default function LearnScreen() {
   const insets = useSafeAreaInsets();
@@ -71,10 +72,7 @@ export default function LearnScreen() {
           </View>
 
           <View style={styles.headerStats}>
-            <View style={styles.statBadge}>
-              <Flame size={16} color={Colors.gold} />
-              <Text style={styles.statText}>{streakCount}</Text>
-            </View>
+            <StreakPill value={streakCount} size="md" onDark />
 
             <View style={styles.statBadge}>
               <Heart size={16} color="#FF6B6B" fill="#FF6B6B" />
