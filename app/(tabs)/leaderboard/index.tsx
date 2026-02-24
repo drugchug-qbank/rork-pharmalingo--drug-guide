@@ -988,7 +988,7 @@ const renderLoadingState = (label = 'Loading...') => (
     </View>
   );
 
-  const leagueRows = leagueQuery.data ?? [];
+  const leagueRows = leagueQuery.data ?? []; const myLeagueRow = leagueRows.find((r) => r.is_me); const headerLeagueRank = myLeagueRow?.rank ?? leagueRank ?? 0; const headerXpThisWeek = myLeagueRow?.xp_this_week ?? progress.stats.xpThisWeek ?? 0; const headerStreak = myLeagueRow?.streak ?? progress.stats.streakCurrent ?? 0; const myLeagueRow = leagueRows.find((r) => r.is_me); const headerLeagueRank = myLeagueRow?.rank ?? leagueRank ?? 0; const headerXpThisWeek = myLeagueRow?.xp_this_week ?? progress.stats.xpThisWeek ?? 0; const headerStreak = myLeagueRow?.streak ?? progress.stats.streakCurrent ?? 0; const myLeagueRow = leagueRows.find((r) => r.is_me); const headerLeagueRank = myLeagueRow?.rank ?? leagueRank ?? 0; const headerXpThisWeek = myLeagueRow?.xp_this_week ?? progress.stats.xpThisWeek ?? 0; const headerStreak = myLeagueRow?.streak ?? progress.stats.streakCurrent ?? 0;
   const top3League = leagueRows.filter((r) => r.rank <= 3);
   const restLeague = leagueRows.filter((r) => r.rank > 3);
   const friends = friendsQuery.data ?? [];
