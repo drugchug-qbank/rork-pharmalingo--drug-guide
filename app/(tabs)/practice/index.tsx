@@ -3,13 +3,14 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Dumbbell, Shuffle, Target, Clock, Zap, TrendingUp, Brain, AlertCircle, RotateCcw } from 'lucide-react-native';
+import { Dumbbell, Shuffle, Target, Clock, TrendingUp, Brain, AlertCircle, RotateCcw } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useProgress } from '@/contexts/ProgressContext';
 import { chapters } from '@/constants/chapters';
 import { getDrugById } from '@/constants/drugData';
 import OutOfHeartsModal from '@/components/OutOfHeartsModal';
 import DrugMasteryCard from '@/components/DrugMasteryCard';
+import XPIcon from '@/components/XPIcon';
 
 export default function PracticeScreen() {
   const insets = useSafeAreaInsets();
@@ -164,7 +165,7 @@ export default function PracticeScreen() {
             end={{ x: 1, y: 1 }}
           >
             <View style={styles.quickPracticeIcon}>
-              <Zap size={28} color="#FFFFFF" />
+              <XPIcon size={28} />
             </View>
             <View style={styles.quickPracticeText}>
               <Text style={styles.quickPracticeTitle}>Brand Blitz Quiz ⚡️</Text>
@@ -186,7 +187,7 @@ export default function PracticeScreen() {
           </View>
           <View style={styles.statCard}>
             <View style={[styles.statIcon, { backgroundColor: Colors.goldLight }]}>
-              <Zap size={18} color={Colors.gold} />
+              <XPIcon size={18} />
             </View>
             <Text style={styles.statValue}>{progress.stats.xpTotal}</Text>
             <Text style={styles.statLabel}>Total XP</Text>

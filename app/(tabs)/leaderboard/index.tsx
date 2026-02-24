@@ -21,7 +21,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Trophy,
   Users,
-  Zap,
   Crown,
   ChevronRight,
   GraduationCap,
@@ -46,6 +45,7 @@ import MascotAnimated from '@/components/MascotAnimated';
 import LeagueWeekResultsModal from '@/components/LeagueResultsModal';
 import ProfessionLeaderboardTab from '@/components/ProfessionLeaderboardTab';
 import StreakFlameIcon from '@/components/StreakFlameIcon';
+import XPIcon from '@/components/XPIcon';
 
 interface LeagueRow {
   user_id: string;
@@ -662,7 +662,7 @@ const handleSendRequestToUsername = useCallback(
             {row.is_me ? ' (You)' : ''}
           </Text>
           <View style={styles.userMeta}>
-            <Zap size={12} color={Colors.gold} />
+            <XPIcon size={12} />
             <Text style={styles.userXp}>{(row.xp_this_week ?? 0).toLocaleString()} XP</Text>
             <Text style={styles.userLevel}>Lv.{row.level ?? 1}</Text>
           </View>
@@ -796,7 +796,7 @@ const renderFriendItem = (friend: FriendRow, index: number) => {
 
               <View style={styles.badgeRow}>
                 <View style={styles.badgePill}>
-                  <Zap size={12} color={Colors.gold} />
+                  <XPIcon size={12} />
                   <Text style={styles.badgeText}>{friend.weekly_xp.toLocaleString()} XP</Text>
                 </View>
 
@@ -988,7 +988,7 @@ const renderLoadingState = (label = 'Loading...') => (
           </View>
           <View style={styles.yourRankDivider} />
           <View style={styles.yourRankRight}>
-            <Zap size={16} color={Colors.gold} />
+            <XPIcon size={16} />
             <Text style={styles.yourXpValue}>{progress.stats.xpThisWeek}</Text>
             <Text style={styles.yourXpLabel}>This Week</Text>
           </View>
@@ -1311,7 +1311,7 @@ const renderLoadingState = (label = 'Loading...') => (
                       </View>
                     </View>
                     <View style={styles.schoolHeaderXpBadge}>
-                      <Zap size={14} color={Colors.gold} />
+                      <XPIcon size={14} />
                       <Text style={styles.schoolHeaderXpText}>{progress.stats.xpThisWeek}</Text>
                     </View>
                   </View>
@@ -1382,7 +1382,7 @@ const renderLoadingState = (label = 'Loading...') => (
                       </View>
 
                       <View style={styles.schoolXpContainer}>
-                        <Zap size={13} color={Colors.gold} />
+                        <XPIcon size={13} />
                         <Text style={styles.schoolXp}>{(row.total_weekly_xp ?? 0).toLocaleString()}</Text>
                       </View>
                     </View>
@@ -1442,13 +1442,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(240, 249, 255, 0.22)',
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
   },
   countdownText: {
     fontSize: 13,
@@ -1461,12 +1461,12 @@ const styles = StyleSheet.create({
   yourRankCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(240, 249, 255, 0.22)',
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
   },
   yourRankLeft: { flex: 1, alignItems: 'center' },
   yourRankLabel: { fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const },
@@ -1479,9 +1479,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(240, 249, 255, 0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.70)',
   },
   yourXpValue: { fontSize: 18, fontWeight: '900' as const, color: '#FFFFFF' },
   yourXpLabel: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const },
@@ -1490,11 +1490,11 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(240, 249, 255, 0.22)',
     borderRadius: 22,
     padding: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
     marginBottom: 6,
   },
   tab: {
@@ -1505,9 +1505,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(240, 249, 255, 0.16)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.70)',
   },
   tabActive: {
     backgroundColor: '#FFFFFF',
