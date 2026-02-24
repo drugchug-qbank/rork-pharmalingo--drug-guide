@@ -16,6 +16,8 @@ interface ShopItemProps {
   onPress: () => void;
   disabled?: boolean;
   highlight?: boolean;
+  /** Optional outline color for the card border */
+  outlineColor?: string;
 }
 
 const ShopItem = React.memo(function ShopItem({
@@ -27,6 +29,7 @@ const ShopItem = React.memo(function ShopItem({
   onPress,
   disabled = false,
   highlight = false,
+  outlineColor,
 }: ShopItemProps) {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -61,6 +64,7 @@ const ShopItem = React.memo(function ShopItem({
         onPressOut={handlePressOut}
         style={[
           styles.shopItem,
+          outlineColor ? { borderColor: outlineColor } : null,
           highlight && styles.shopItemHighlight,
           disabled && styles.shopItemDisabled,
         ]}
@@ -233,6 +237,7 @@ export default function ShopScreen() {
           priceType="coins"
           onPress={handleBuyOneHeart}
           disabled={heartsFull}
+          outlineColor={Colors.primary}
         />
 
         <ShopItem
@@ -254,6 +259,7 @@ export default function ShopScreen() {
           priceType="ad"
           onPress={handleWatchAd}
           disabled={heartsFull || watchingAd}
+          outlineColor={Colors.primary}
         />
 
         <View style={styles.divider} />
@@ -349,6 +355,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
     borderRadius: 20,
     marginTop: 16,
     paddingVertical: 14,
