@@ -5,11 +5,67 @@ import type { Session, User } from '@supabase/supabase-js';
 
 export interface UserProfile {
   id: string;
-  display_name: string;
+  display_name: string | null;
   username: string | null;
   school_id: string | null;
   school_name: string | null;
+  profession_id: number | null;
   created_at: string;
+}
+
+function looksLikeEmail(value: string | null | undefined): boolean {
+  const v = (value ?? '').trim();
+  if (!v) return false;
+  // Simple + safe: if it contains "@" we treat it as email-like.
+  // We never want emails in username/display_name.
+  return v.includes('@');
+}
+
+function isValidPublicUsername(value: string | null | undefined): boolean {
+  const v = (value ?? '').trim();
+  if (!v) return false;
+  if (looksLikeEmail(v)) return false;
+
+  // Basic sanity
+  if (/\s/.test(v)) return false;
+  if (!/^[A-Za-z0-9_.]+$/.test(v)) return false;
+  if (v.length < 3 || v.length > 20) return false;
+
+  return true;
+}
+
+function normalizeUsername(input: string | null | undefined): string | null {
+  const raw = (input ?? '').trim();
+  if (!raw) return null;
+
+  const noAt = raw.startsWith('@') ? raw.slice(1) : raw;
+  const normalized = noAt.trim().toLowerCase();
+
+  if (!normalized) return null;
+  if (looksLikeEmail(normalized)) return null;
+
+  return normalized;
+}
+
+function normalizeDisplayName(input: string | null | undefined): string | null {
+  const v = (input ?? '').trim();
+  if (!v) return null;
+  // Never store email-looking strings as display names
+  if (looksLikeEmail(v)) return null;
+  return v;
+}
+
+function isProfileIncomplete(p: UserProfile | null): boolean {
+  if (!p) return true;
+  // Require a real username (NOT an email)
+  if (!isValidPublicUsername(p.username)) return true;
+  // Also treat email-like display_name as incomplete (force user to fix)
+  if (looksLikeEmail(p.display_name)) return true;
+
+  // ✅ Profession is required for leaderboards + monthly Profession Battle
+  if (p.profession_id == null) return true;
+
+  return false;
 }
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -84,12 +140,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         setUser(currentSession.user);
 
         const userProfile = await fetchProfile(currentSession.user.id);
-        if (userProfile) {
-          setProfile(userProfile);
-          setNeedsProfile(false);
-        } else {
-          setNeedsProfile(true);
-        }
+        if (userProfile) setProfile(userProfile);
+
+        // ✅ A profile is only "complete" if it has a real username (NOT an email)
+        setNeedsProfile(isProfileIncomplete(userProfile));
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -131,12 +185,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
           try {
             const userProfile = await fetchProfile(newSession.user.id);
-            if (userProfile) {
-              setProfile(userProfile);
-              setNeedsProfile(false);
-            } else {
-              setNeedsProfile(true);
-            }
+            if (userProfile) setProfile(userProfile);
+            setNeedsProfile(isProfileIncomplete(userProfile));
           } catch (err) {
             console.log('[Auth] Profile fetch in state change failed:', err);
             setNeedsProfile(true);
@@ -194,12 +244,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     setUser(data.user);
 
     const userProfile = await fetchProfile(data.user.id);
-    if (userProfile) {
-      setProfile(userProfile);
-      setNeedsProfile(false);
-    } else {
-      setNeedsProfile(true);
-    }
+    if (userProfile) setProfile(userProfile);
+    setNeedsProfile(isProfileIncomplete(userProfile));
   }, [fetchProfile]);
 
   const signOut = useCallback(async () => {
@@ -224,10 +270,17 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     if (!user) throw new Error('No user logged in');
     console.log('[Auth] Completing profile for:', user.id);
 
+    const usernameNorm = normalizeUsername(username);
+    if (!isValidPublicUsername(usernameNorm)) {
+      throw new Error('Please choose a valid username (3–20 chars: letters, numbers, _ or .).');
+    }
+
+    const displayNameNorm = normalizeDisplayName(displayName) ?? usernameNorm;
+
     const profileData = {
       id: user.id,
-      display_name: displayName,
-      username: username || null,
+      display_name: displayNameNorm,
+      username: usernameNorm,
       school_name: schoolName || null,
     };
 
@@ -242,6 +295,12 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     if (error) {
       console.log('[Auth] Profile save error:', error.message, error.details, error.hint, error.code);
+
+      // Friendly message for duplicate username (unique constraint)
+      if (error.code === '23505') {
+        throw new Error('That username is already taken. Try another.');
+      }
+
       throw new Error(error.message || 'Failed to save profile');
     }
 
@@ -249,15 +308,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     const savedProfile: UserProfile = {
       id: user.id,
-      display_name: displayName,
-      username: username || null,
-      school_id: null,
-      school_name: schoolName ?? null,
-      created_at: data?.created_at ?? new Date().toISOString(),
+      display_name: (data as any)?.display_name ?? displayNameNorm,
+      username: (data as any)?.username ?? usernameNorm,
+      school_id: (data as any)?.school_id ?? null,
+      school_name: (data as any)?.school_name ?? (schoolName ?? null),
+      profession_id: (data as any)?.profession_id ?? null,
+      created_at: (data as any)?.created_at ?? new Date().toISOString(),
     };
 
     setProfile(savedProfile);
-    setNeedsProfile(false);
+    setNeedsProfile(isProfileIncomplete(savedProfile));
     console.log('[Auth] Profile completed successfully');
   }, [user]);
 
@@ -266,6 +326,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     const userProfile = await fetchProfile(user.id);
     if (userProfile) {
       setProfile(userProfile);
+      setNeedsProfile(isProfileIncomplete(userProfile));
     }
   }, [user, fetchProfile]);
 
