@@ -1442,13 +1442,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+<<<<<<< HEAD
     backgroundColor: 'rgba(240, 249, 255, 0.34)',
+=======
+    backgroundColor: 'rgba(240, 249, 255, 0.22)',
+>>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 14,
     marginBottom: 12,
+<<<<<<< HEAD
     borderWidth: 2.5,
     borderColor: 'rgba(255,255,255,0.95)',
+=======
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+>>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
   },
   countdownText: {
     fontSize: 13,
@@ -1461,12 +1470,21 @@ const styles = StyleSheet.create({
   yourRankCard: {
     flexDirection: 'row',
     alignItems: 'center',
+<<<<<<< HEAD
     backgroundColor: 'rgba(240, 249, 255, 0.34)',
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
     borderWidth: 2.5,
     borderColor: 'rgba(255,255,255,0.95)',
+=======
+    backgroundColor: 'rgba(240, 249, 255, 0.22)',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+>>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
   },
   yourRankLeft: { flex: 1, alignItems: 'center' },
   yourRankLabel: { fontSize: 11, color: 'rgba(255,255,255,0.82)', fontWeight: '700' as const },
@@ -1479,9 +1497,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+<<<<<<< HEAD
     backgroundColor: 'rgba(240, 249, 255, 0.26)',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.90)',
+=======
+    backgroundColor: 'rgba(240, 249, 255, 0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.70)',
+>>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
   },
   yourXpValue: { fontSize: 18, fontWeight: '900' as const, color: '#FFFFFF' },
   yourXpLabel: { fontSize: 10, color: 'rgba(255,255,255,0.82)', fontWeight: '700' as const },
@@ -1490,11 +1514,19 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     gap: 10,
+<<<<<<< HEAD
     backgroundColor: 'rgba(240, 249, 255, 0.34)',
     borderRadius: 22,
     padding: 6,
     borderWidth: 2.5,
     borderColor: 'rgba(255,255,255,0.95)',
+=======
+    backgroundColor: 'rgba(240, 249, 255, 0.22)',
+    borderRadius: 22,
+    padding: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+>>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
     marginBottom: 6,
   },
   tab: {
@@ -1505,9 +1537,15 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 12,
     borderRadius: 18,
+<<<<<<< HEAD
     backgroundColor: 'rgba(240, 249, 255, 0.24)',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.90)',
+=======
+    backgroundColor: 'rgba(240, 249, 255, 0.16)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.70)',
+>>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
   },
   tabActive: {
     backgroundColor: '#FFFFFF',

@@ -929,9 +929,15 @@ const styles = StyleSheet.create({
   headerStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+<<<<<<< HEAD
     backgroundColor: 'rgba(240, 249, 255, 0.34)',
     borderWidth: 2.5,
     borderColor: 'rgba(255,255,255,0.95)',
+=======
+    backgroundColor: 'rgba(240, 249, 255, 0.22)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+>>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
     borderRadius: 20,
     marginTop: 16,
     paddingVertical: 14,
@@ -945,9 +951,15 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+<<<<<<< HEAD
     backgroundColor: 'rgba(240, 249, 255, 0.26)',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.90)',
+=======
+    backgroundColor: 'rgba(240, 249, 255, 0.18)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.70)',
+>>>>>>> 886717ede766810c2c94fee0f788e2a965d02e87
   },
   headerStatValue: { fontSize: 20, fontWeight: '900' as const, color: '#FFFFFF' },
   headerStatLabel: { fontSize: 11, color: 'rgba(255,255,255,0.82)', fontWeight: '700' as const },
