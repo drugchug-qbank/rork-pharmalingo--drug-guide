@@ -610,40 +610,40 @@ month_end: String(r.month_end ?? ''),
   const bannerColors = useMemo(() => {
     if (banner.type === 'good') {
       return {
-        bg: 'rgba(34,197,94,0.16)',
-        border: 'rgba(34,197,94,0.28)',
-        icon: '#86EFAC',
-        chip: 'rgba(34,197,94,0.22)',
+        bg: Colors.surface,
+        border: Colors.success + '55',
+        icon: Colors.success,
+        chip: Colors.successLight,
       };
     }
     if (banner.type === 'warn') {
       return {
-        bg: 'rgba(245,158,11,0.16)',
-        border: 'rgba(245,158,11,0.28)',
-        icon: '#FCD34D',
-        chip: 'rgba(245,158,11,0.22)',
+        bg: Colors.surface,
+        border: Colors.warning + '55',
+        icon: Colors.warning,
+        chip: Colors.warningLight,
       };
     }
     if (banner.type === 'bad') {
       return {
-        bg: 'rgba(239,68,68,0.16)',
-        border: 'rgba(239,68,68,0.28)',
-        icon: '#FCA5A5',
-        chip: 'rgba(239,68,68,0.22)',
+        bg: Colors.surface,
+        border: Colors.error + '55',
+        icon: Colors.error,
+        chip: Colors.errorLight,
       };
     }
     return {
-      bg: 'rgba(255,255,255,0.10)',
-      border: 'rgba(255,255,255,0.18)',
-      icon: 'rgba(255,255,255,0.85)',
-      chip: 'rgba(255,255,255,0.16)',
+      bg: Colors.surface,
+      border: Colors.surfaceAlt,
+      icon: Colors.primaryDark,
+      chip: Colors.primaryLight,
     };
   }, [banner.type]);
 
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={[Colors.secondary, Colors.secondaryLight]}
+        colors={[Colors.primary, Colors.primaryDark]}
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <View style={styles.avatarContainer}>
@@ -659,19 +659,30 @@ month_end: String(r.month_end ?? ''),
 
         <View style={styles.headerStatsRow}>
           <View style={styles.headerStat}>
-            <Flame size={18} color={Colors.gold} />
+            <LinearGradient
+              colors={['#FDBA74', '#F97316', '#EF4444']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.headerStreakIcon}
+            >
+              <Flame size={16} color="#FFFFFF" strokeWidth={2.6} />
+            </LinearGradient>
             <Text style={styles.headerStatValue}>{streakCurrent}</Text>
             <Text style={styles.headerStatLabel}>Streak</Text>
           </View>
           <View style={styles.headerStatDivider} />
           <View style={styles.headerStat}>
-            <Target size={18} color={Colors.primary} />
+            <View style={styles.headerStatIcon}>
+              <Target size={16} color={Colors.primaryDark} strokeWidth={2.6} />
+            </View>
             <Text style={styles.headerStatValue}>{accuracy}%</Text>
             <Text style={styles.headerStatLabel}>Accuracy</Text>
           </View>
           <View style={styles.headerStatDivider} />
           <View style={styles.headerStat}>
-            <BookOpen size={18} color="#8B5CF6" />
+            <View style={styles.headerStatIcon}>
+              <BookOpen size={16} color="#8B5CF6" strokeWidth={2.6} />
+            </View>
             <Text style={styles.headerStatValue}>{totalLessonsCompleted}</Text>
             <Text style={styles.headerStatLabel}>Lessons</Text>
           </View>
@@ -915,9 +926,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: Colors.secondary,
+    borderColor: Colors.primaryDark,
   },
-  levelText: { fontSize: 12, fontWeight: '900' as const, color: Colors.secondary },
+  levelText: { fontSize: 12, fontWeight: '900' as const, color: Colors.primaryDark },
   profileTitle: { fontSize: 24, fontWeight: '900' as const, color: '#FFFFFF' },
   profileSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.7)', marginTop: 4, fontWeight: '600' as const },
 
@@ -932,6 +943,23 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   headerStat: { flex: 1, alignItems: 'center', gap: 4 },
+  headerStatIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  headerStreakIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerStatValue: { fontSize: 20, fontWeight: '900' as const, color: '#FFFFFF' },
   headerStatLabel: { fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '600' as const },
   headerStatDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.15)' },
@@ -947,14 +975,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 6,
   },
   streakBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   streakBannerIconBg: { width: 36, height: 36, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   streakBannerText: { flex: 1 },
-  streakBannerTitle: { fontSize: 13, fontWeight: '900' as const, color: '#FFFFFF' },
-  streakBannerSubtitle: { fontSize: 11, fontWeight: '600' as const, color: 'rgba(255,255,255,0.7)', marginTop: 2, lineHeight: 15 },
+  streakBannerTitle: { fontSize: 13, fontWeight: '900' as const, color: Colors.text },
+  streakBannerSubtitle: { fontSize: 11, fontWeight: '600' as const, color: Colors.textSecondary, marginTop: 2, lineHeight: 15 },
   streakBannerPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, minWidth: 82, alignItems: 'center', justifyContent: 'center' },
-  streakBannerPillText: { fontSize: 12, fontWeight: '900' as const, color: '#FFFFFF', fontVariant: ['tabular-nums'] as const },
+  streakBannerPillText: { fontSize: 12, fontWeight: '900' as const, color: Colors.text, fontVariant: ['tabular-nums'] as const },
 
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },

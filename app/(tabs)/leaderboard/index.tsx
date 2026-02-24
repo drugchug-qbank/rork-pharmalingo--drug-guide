@@ -959,7 +959,7 @@ const renderLoadingState = (label = 'Loading...') => (
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={[Colors.secondary, '#1a2744']}
+        colors={[Colors.primary, Colors.primaryDark]}
         style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
         <View style={styles.headerTop}>
@@ -994,7 +994,14 @@ const renderLoadingState = (label = 'Loading...') => (
           </View>
           <View style={styles.yourRankDivider} />
           <View style={styles.yourRankRight}>
-            <Flame size={16} color="#FF6B6B" />
+            <LinearGradient
+              colors={['#FDBA74', '#F97316', '#EF4444']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.streakIconCircle}
+            >
+              <Flame size={14} color="#FFFFFF" strokeWidth={2.6} />
+            </LinearGradient>
             <Text style={styles.yourXpValue}>{progress.stats.streakCurrent}</Text>
             <Text style={styles.yourXpLabel}>Streak</Text>
           </View>
@@ -1004,15 +1011,15 @@ const renderLoadingState = (label = 'Loading...') => (
         <View style={styles.tabBar}>
           {TABS.map(({ key, label, Icon }) => {
             const isActive = activeTab === key;
-            const iconColor = isActive ? Colors.secondary : 'rgba(255,255,255,0.85)';
-            const textColor = isActive ? Colors.secondary : 'rgba(255,255,255,0.85)';
+            const iconColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.85)';
+            const textColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.85)';
             return (
               <Pressable
                 key={key}
                 style={[styles.tab, isActive && styles.tabActive]}
                 onPress={() => switchTab(key)}
               >
-                <Icon size={16} color={iconColor} />
+                <Icon size={18} color={iconColor} />
                 <Text style={[styles.tabText, { color: textColor }, isActive && styles.tabTextActive]}>
                   {label}
                 </Text>
@@ -1047,50 +1054,63 @@ const renderLoadingState = (label = 'Loading...') => (
                 {proximityMessage && (
                   <View
                     style={[
-                      styles.proximityBanner,
-                      proximityMessage.type === 'urgent' && styles.proximityUrgent,
-                      proximityMessage.type === 'success' && styles.proximitySuccess,
-                      proximityMessage.type === 'warning' && styles.proximityWarning,
+                      styles.callout,
+                      proximityMessage.type === 'urgent' && styles.calloutUrgent,
+                      proximityMessage.type === 'success' && styles.calloutSuccess,
+                      proximityMessage.type === 'warning' && styles.calloutWarning,
                     ]}
                   >
-                    <Target
-                      size={16}
-                      color={
-                        proximityMessage.type === 'urgent'
-                          ? '#DC2626'
-                          : proximityMessage.type === 'success'
-                            ? '#16A34A'
-                            : proximityMessage.type === 'warning'
-                              ? '#D97706'
-                              : Colors.primary
-                      }
-                    />
-                    <Text
+                    <View
                       style={[
-                        styles.proximityText,
-                        proximityMessage.type === 'urgent' && { color: '#DC2626' },
-                        proximityMessage.type === 'success' && { color: '#16A34A' },
-                        proximityMessage.type === 'warning' && { color: '#D97706' },
+                        styles.calloutIcon,
+                        proximityMessage.type === 'urgent' && { backgroundColor: Colors.errorLight },
+                        proximityMessage.type === 'success' && { backgroundColor: Colors.successLight },
+                        proximityMessage.type === 'warning' && { backgroundColor: Colors.warningLight },
                       ]}
                     >
-                      {proximityMessage.text}
-                    </Text>
+                      <Target
+                        size={18}
+                        color={
+                          proximityMessage.type === 'urgent'
+                            ? Colors.error
+                            : proximityMessage.type === 'success'
+                              ? Colors.success
+                              : proximityMessage.type === 'warning'
+                                ? Colors.warning
+                                : Colors.primary
+                        }
+                      />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.calloutTitle}>{proximityMessage.text}</Text>
+                    </View>
                   </View>
                 )}
 
-                <View style={[styles.promoteBanner, { backgroundColor: '#DCFCE7', borderColor: '#22C55E30' }]}>
-                  <TrendingUp size={16} color="#22C55E" />
-                  <Text style={[styles.promoteBannerText, { color: '#16A34A' }]}>
-                    Finish Top 10 to get promoted to{' '}
-                    {currentTier === 'Gold' ? 'Gold (max)' : currentTier === 'Silver' ? 'Gold' : 'Silver'}!
-                  </Text>
+                <View style={[styles.callout, styles.calloutSuccess]}> 
+                  <View style={[styles.calloutIcon, { backgroundColor: Colors.successLight }]}>
+                    <TrendingUp size={18} color={Colors.success} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.calloutTitle}>Promotion</Text>
+                    <Text style={styles.calloutSubtitle}>
+                      Finish Top 10 to get promoted to{' '}
+                      {currentTier === 'Gold' ? 'Gold (max)' : currentTier === 'Silver' ? 'Gold' : 'Silver'}.
+                    </Text>
+                  </View>
                 </View>
 
-                <View style={[styles.promoteBanner, { backgroundColor: '#FEE2E2', borderColor: '#EF444430' }]}>
-                  <AlertTriangle size={16} color={Colors.error} />
-                  <Text style={[styles.promoteBannerText, { color: Colors.error }]}>
-                    Bottom 5 get demoted{currentTier === 'Bronze' ? " (you're safe in Bronze)" : ''}
-                  </Text>
+                <View style={[styles.callout, styles.calloutUrgent]}> 
+                  <View style={[styles.calloutIcon, { backgroundColor: Colors.errorLight }]}>
+                    <AlertTriangle size={18} color={Colors.error} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.calloutTitle}>Demotion</Text>
+                    <Text style={styles.calloutSubtitle}>
+                      Bottom 5 get demoted{currentTier === 'Bronze' ? " (you're safe in Bronze)" : ''}.
+                    </Text>
+                  </View>
                 </View>
 
                 {top3League.length >= 3 && (
@@ -1103,22 +1123,38 @@ const renderLoadingState = (label = 'Loading...') => (
 
                       return (
                         <View key={u.user_id} style={styles.podiumItem}>
-                          <View style={[styles.podiumAvatar, { borderColor: getMedalColor(rank) }]}>
-                            <Text style={styles.podiumAvatarText}>{u.avatar_emoji || '👤'}</Text>
-                            {rank === 1 && <Crown size={18} color="#FFD700" style={styles.crownIcon} />}
+                          <View style={styles.podiumCard}>
+                            <View style={[styles.podiumAvatar, { borderColor: getMedalColor(rank) }]}> 
+                              <Text style={styles.podiumAvatarText}>{u.avatar_emoji || '👤'}</Text>
+                              {rank === 1 && <Crown size={18} color="#FFD700" style={styles.crownIcon} />}
+                            </View>
+                            <Text style={styles.podiumName} numberOfLines={1}>
+                              {u.display_name}
+                              {u.is_me ? ' (You)' : ''}
+                            </Text>
+                            <Text style={styles.podiumXp}>{(u.xp_this_week ?? 0).toLocaleString()} XP</Text>
+                            <View style={styles.podiumStreakBadge}>
+                              <Flame size={11} color="#FF6B6B" />
+                              <Text style={styles.podiumStreakText}>{u.streak ?? 0}</Text>
+                            </View>
                           </View>
-                          <Text style={styles.podiumName} numberOfLines={1}>
-                            {u.display_name}
-                            {u.is_me ? ' (You)' : ''}
-                          </Text>
-                          <Text style={styles.podiumXp}>{(u.xp_this_week ?? 0).toLocaleString()}</Text>
-                          <View style={styles.podiumStreakBadge}>
-                            <Flame size={11} color="#FF6B6B" />
-                            <Text style={styles.podiumStreakText}>{u.streak ?? 0}</Text>
-                          </View>
-                          <View style={[styles.podiumBar, { height: podiumHeight, backgroundColor: getMedalColor(rank) }]}>
-                            <Text style={styles.podiumRank}>{rank}</Text>
-                          </View>
+
+                          <LinearGradient
+                            colors={
+                              rank === 1
+                                ? ['#FDE68A', '#F59E0B']
+                                : rank === 2
+                                  ? ['#E5E7EB', '#9CA3AF']
+                                  : ['#FED7AA', '#CD7F32']
+                            }
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={[styles.podiumBar, { height: podiumHeight }]}
+                          >
+                            <View style={styles.podiumRankBadge}>
+                              <Text style={styles.podiumRank}>{rank}</Text>
+                            </View>
+                          </LinearGradient>
                         </View>
                       );
                     })}
@@ -1438,28 +1474,35 @@ const styles = StyleSheet.create({
   yourRankValue: { fontSize: 24, fontWeight: '900' as const, color: Colors.gold },
   yourRankDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.15)', marginHorizontal: 12 },
   yourRankRight: { flex: 1, alignItems: 'center', gap: 2 },
+  streakIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   yourXpValue: { fontSize: 18, fontWeight: '900' as const, color: '#FFFFFF' },
   yourXpLabel: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const },
 
   // ✅ Tabs POP more: active is a bright pill
   tabBar: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 10,
     backgroundColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 20,
-    padding: 5,
+    borderRadius: 22,
+    padding: 6,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.22)',
     marginBottom: 6,
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 16,
+    gap: 4,
+    paddingVertical: 12,
+    borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -1529,12 +1572,73 @@ const styles = StyleSheet.create({
   proximityWarning: { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' },
   proximityText: { flex: 1, fontSize: 14, fontWeight: '800' as const, color: Colors.primary },
 
-  podium: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 20, paddingTop: 20, gap: 8 },
+  // Modern "callout" cards (replace the old highlighter banners)
+  callout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    marginBottom: 10,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  calloutSuccess: { borderLeftColor: Colors.success },
+  calloutWarning: { borderLeftColor: Colors.warning },
+  calloutUrgent: { borderLeftColor: Colors.error },
+  calloutIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calloutTitle: {
+    fontSize: 13,
+    fontWeight: '900' as const,
+    color: Colors.text,
+    lineHeight: 18,
+  },
+  calloutSubtitle: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+
+  podium: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', marginBottom: 18, paddingTop: 18, gap: 10 },
   podiumItem: { flex: 1, alignItems: 'center' },
+  podiumCard: {
+    width: '100%',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    paddingTop: 12,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: Colors.surfaceAlt,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    elevation: 4,
+    marginBottom: 8,
+  },
   podiumAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 3,
     backgroundColor: Colors.surface,
     alignItems: 'center',
@@ -1545,7 +1649,7 @@ const styles = StyleSheet.create({
   podiumAvatarText: { fontSize: 24 },
   crownIcon: { position: 'absolute', top: -14 },
   podiumName: { fontSize: 12, fontWeight: '700' as const, color: Colors.text, marginBottom: 2 },
-  podiumXp: { fontSize: 11, fontWeight: '800' as const, color: Colors.textSecondary, marginBottom: 3 },
+  podiumXp: { fontSize: 11, fontWeight: '800' as const, color: Colors.textSecondary, marginBottom: 4 },
   podiumStreakBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1557,8 +1661,26 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   podiumStreakText: { fontSize: 11, fontWeight: '800' as const, color: '#92400E' },
-  podiumBar: { width: '80%', borderTopLeftRadius: 10, borderTopRightRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  podiumRank: { fontSize: 20, fontWeight: '900' as const, color: '#FFFFFF' },
+  podiumBar: {
+    width: '100%',
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  podiumRankBadge: {
+    backgroundColor: 'rgba(15,23,42,0.30)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  podiumRank: { fontSize: 18, fontWeight: '900' as const, color: '#FFFFFF' },
 
   leaderItem: {
     flexDirection: 'row',

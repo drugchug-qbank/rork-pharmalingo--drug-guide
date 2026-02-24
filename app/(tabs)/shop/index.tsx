@@ -161,7 +161,7 @@ export default function ShopScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={[Colors.secondary, Colors.secondaryLight]}
+        colors={[Colors.primary, Colors.primaryDark]}
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <View style={styles.headerRow}>
@@ -184,7 +184,7 @@ export default function ShopScreen() {
           </View>
           <View style={styles.walletDivider} />
           <View style={styles.walletItem}>
-            <Zap size={20} color={Colors.primary} />
+            <Zap size={20} color="#FFFFFF" />
             <Text style={styles.walletValue}>{progress.stats.xpTotal}</Text>
             <Text style={styles.walletLabel}>XP</Text>
           </View>
