@@ -2,10 +2,11 @@ import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Heart, Coins, Play, Sparkles, ShoppingBag, Zap, Gift, Shield, Clock } from 'lucide-react-native';
+import { Heart, Coins, Play, Sparkles, ShoppingBag, Gift, Shield, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useProgress } from '@/contexts/ProgressContext';
+import XPIcon from '@/components/XPIcon';
 
 interface ShopItemProps {
   icon: React.ReactNode;
@@ -188,7 +189,7 @@ export default function ShopScreen() {
           </View>
           <View style={styles.walletDivider} />
           <View style={styles.walletItem}>
-            <Zap size={20} color="#FFFFFF" />
+            <XPIcon size={20} />
             <Text style={styles.walletValue}>{progress.stats.xpTotal}</Text>
             <Text style={styles.walletLabel}>XP</Text>
           </View>
@@ -306,7 +307,7 @@ export default function ShopScreen() {
         <View style={styles.earnCard}>
           <View style={styles.earnRow}>
             <View style={styles.earnIcon}>
-              <Zap size={20} color={Colors.gold} />
+              <XPIcon size={20} />
             </View>
             <View style={styles.earnInfo}>
               <Text style={styles.earnTitle}>Perfect Score Bonus</Text>
@@ -347,16 +348,16 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.9)',
     marginTop: 4,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
   },
   walletRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'rgba(240, 249, 255, 0.34)',
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,255,255,0.95)',
     borderRadius: 20,
     marginTop: 16,
     paddingVertical: 14,
@@ -374,13 +375,13 @@ const styles = StyleSheet.create({
   },
   walletLabel: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
-    fontWeight: '600' as const,
+    color: 'rgba(255,255,255,0.82)',
+    fontWeight: '700' as const,
   },
   walletDivider: {
     width: 1,
     height: 36,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
   scrollView: {
     flex: 1,

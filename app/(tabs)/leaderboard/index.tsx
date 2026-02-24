@@ -21,7 +21,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Trophy,
   Users,
-  Zap,
   Crown,
   ChevronRight,
   GraduationCap,
@@ -46,6 +45,7 @@ import MascotAnimated from '@/components/MascotAnimated';
 import LeagueWeekResultsModal from '@/components/LeagueResultsModal';
 import ProfessionLeaderboardTab from '@/components/ProfessionLeaderboardTab';
 import StreakFlameIcon from '@/components/StreakFlameIcon';
+import XPIcon from '@/components/XPIcon';
 
 interface LeagueRow {
   user_id: string;
@@ -662,7 +662,7 @@ const handleSendRequestToUsername = useCallback(
             {row.is_me ? ' (You)' : ''}
           </Text>
           <View style={styles.userMeta}>
-            <Zap size={12} color={Colors.gold} />
+            <XPIcon size={12} />
             <Text style={styles.userXp}>{(row.xp_this_week ?? 0).toLocaleString()} XP</Text>
             <Text style={styles.userLevel}>Lv.{row.level ?? 1}</Text>
           </View>
@@ -796,7 +796,7 @@ const renderFriendItem = (friend: FriendRow, index: number) => {
 
               <View style={styles.badgeRow}>
                 <View style={styles.badgePill}>
-                  <Zap size={12} color={Colors.gold} />
+                  <XPIcon size={12} />
                   <Text style={styles.badgeText}>{friend.weekly_xp.toLocaleString()} XP</Text>
                 </View>
 
@@ -974,7 +974,7 @@ const renderLoadingState = (label = 'Loading...') => (
         </View>
 
         <Animated.View style={[styles.countdownCard, daysLeft <= 1 && { transform: [{ scale: urgencyPulse }] }]}>
-          <Clock size={14} color={daysLeft <= 1 ? '#EF4444' : 'rgba(255,255,255,0.7)'} />
+          <Clock size={14} color={daysLeft <= 1 ? '#EF4444' : 'rgba(255,255,255,0.92)'} />
           <Text style={[styles.countdownText, daysLeft <= 1 && styles.countdownUrgent]}>
             {daysLeft <= 1 ? '⏰ LAST CHANCE • ' : 'Week ends in '}
             {weekCountdown}
@@ -988,7 +988,7 @@ const renderLoadingState = (label = 'Loading...') => (
           </View>
           <View style={styles.yourRankDivider} />
           <View style={styles.yourRankRight}>
-            <Zap size={16} color={Colors.gold} />
+            <XPIcon size={16} />
             <Text style={styles.yourXpValue}>{progress.stats.xpThisWeek}</Text>
             <Text style={styles.yourXpLabel}>This Week</Text>
           </View>
@@ -1006,8 +1006,8 @@ const renderLoadingState = (label = 'Loading...') => (
         <View style={styles.tabBar}>
           {TABS.map(({ key, label, Icon }) => {
             const isActive = activeTab === key;
-            const iconColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.85)';
-            const textColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.85)';
+            const iconColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.95)';
+            const textColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.95)';
             return (
               <Pressable
                 key={key}
@@ -1311,7 +1311,7 @@ const renderLoadingState = (label = 'Loading...') => (
                       </View>
                     </View>
                     <View style={styles.schoolHeaderXpBadge}>
-                      <Zap size={14} color={Colors.gold} />
+                      <XPIcon size={14} />
                       <Text style={styles.schoolHeaderXpText}>{progress.stats.xpThisWeek}</Text>
                     </View>
                   </View>
@@ -1382,7 +1382,7 @@ const renderLoadingState = (label = 'Loading...') => (
                       </View>
 
                       <View style={styles.schoolXpContainer}>
-                        <Zap size={13} color={Colors.gold} />
+                        <XPIcon size={13} />
                         <Text style={styles.schoolXp}>{(row.total_weekly_xp ?? 0).toLocaleString()}</Text>
                       </View>
                     </View>
@@ -1442,18 +1442,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(240, 249, 255, 0.34)',
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,255,255,0.95)',
   },
   countdownText: {
     fontSize: 13,
-    fontWeight: '700' as const,
-    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '800' as const,
+    color: 'rgba(255,255,255,0.92)',
     fontVariant: ['tabular-nums'] as const,
   },
   countdownUrgent: { color: '#FCA5A5', fontWeight: '800' as const },
@@ -1461,17 +1461,17 @@ const styles = StyleSheet.create({
   yourRankCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(240, 249, 255, 0.34)',
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,255,255,0.95)',
   },
   yourRankLeft: { flex: 1, alignItems: 'center' },
-  yourRankLabel: { fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const },
+  yourRankLabel: { fontSize: 11, color: 'rgba(255,255,255,0.82)', fontWeight: '700' as const },
   yourRankValue: { fontSize: 24, fontWeight: '900' as const, color: Colors.gold },
-  yourRankDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.15)', marginHorizontal: 12 },
+  yourRankDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.25)', marginHorizontal: 12 },
   yourRankRight: { flex: 1, alignItems: 'center', gap: 2 },
   streakIconCircle: {
     width: 28,
@@ -1479,22 +1479,22 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.30)',
+    backgroundColor: 'rgba(240, 249, 255, 0.26)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.90)',
   },
   yourXpValue: { fontSize: 18, fontWeight: '900' as const, color: '#FFFFFF' },
-  yourXpLabel: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '600' as const },
+  yourXpLabel: { fontSize: 10, color: 'rgba(255,255,255,0.82)', fontWeight: '700' as const },
 
   // ✅ Tabs POP more: active is a bright pill
   tabBar: {
     flexDirection: 'row',
     gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(240, 249, 255, 0.34)',
     borderRadius: 22,
     padding: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 2.5,
+    borderColor: 'rgba(255,255,255,0.95)',
     marginBottom: 6,
   },
   tab: {
@@ -1505,9 +1505,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(240, 249, 255, 0.24)',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.90)',
   },
   tabActive: {
     backgroundColor: '#FFFFFF',
