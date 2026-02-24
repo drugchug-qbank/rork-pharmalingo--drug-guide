@@ -35,7 +35,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
 
-    // Only disable locks on native (keep default behavior on web).
-    ...(Platform.OS !== 'web' ? { lock: noOpLock } : {}),
+    lock: noOpLock,
   },
 });

@@ -20,11 +20,11 @@ const queryClient = new QueryClient({
         if (error instanceof Error && error.message?.includes('signal is aborted')) return false;
         return failureCount < 2;
       },
-      networkMode: 'online',
+      networkMode: 'always',
     },
     mutations: {
       retry: false,
-      networkMode: 'online',
+      networkMode: 'always',
     },
   },
 });
