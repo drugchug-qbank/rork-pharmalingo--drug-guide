@@ -128,25 +128,155 @@ export default function LessonScreen() {
   const mistakesParam = useLocalSearchParams<{ mistakesJson?: string }>().mistakesJson;
   const mistakesDrugIdsParam = useLocalSearchParams<{ mistakeDrugIds?: string }>().mistakeDrugIds;
 
+  // --- Quiz ordering: ramp difficulty + keep multi-select ("select all") at the end ---
+  // Multi-select questions are the hardest. To avoid discouraging learners early, we:
+  // 1) Cap multi-select to at most 4 per quiz
+  // 2) Place any multi-select questions only within the LAST 4 questions
+  // 3) Sort the rest of the quiz from easier → harder (with light randomness)
+  const shuffle = <T,>(arr: T[]): T[] => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+
+  const difficultyOf = (q: QuizQuestion): number => {
+    switch (q.type) {
+      case 'brand_to_generic':
+      case 'generic_to_brand':
+      case 'true_false':
+        return 1;
+      case 'suffix':
+      case 'cloze':
+      case 'drug_class':
+      case 'indication':
+      case 'side_effect':
+      case 'key_fact':
+        return 2;
+      case 'dosing':
+      case 'not_indication':
+      case 'not_side_effect':
+      case 'clinical_pearl':
+      case 'class_comparison':
+      case 'matching':
+      case 'external_mcq':
+        return 3;
+      case 'multi_select':
+        return 4;
+      default:
+        return 2;
+    }
+  };
+
+  const convertOverflowMultiSelectToSingle = (q: QuizQuestion): QuizQuestion => {
+    const corrects = (q.correctAnswers ?? []).filter(Boolean);
+    const incorrects = q.options.filter((o) => !corrects.includes(o));
+
+    // Fallback: if something is malformed, turn into a simple True/False.
+    if (corrects.length === 0 || incorrects.length === 0) {
+      const option = q.options?.[0] ?? 'True';
+      return {
+        ...q,
+        type: 'true_false',
+        question: `True or False: ${option}`,
+        correctAnswer: 'True',
+        correctAnswers: undefined,
+        options: ['True', 'False'],
+      };
+    }
+
+    const correct = corrects[Math.floor(Math.random() * corrects.length)];
+    const distractors = shuffle(incorrects).slice(0, 3);
+    const opts = shuffle([correct, ...distractors]);
+
+    let newQuestion = q.question ?? 'Pick ONE:';
+    const lower = newQuestion.toLowerCase();
+    if (lower.includes('select all')) {
+      newQuestion = newQuestion
+        .replace(/select\s+all/gi, 'Pick ONE')
+        .replace(/that\s+apply/gi, '')
+        .replace(/side\s+effects/gi, 'side effect')
+        .replace(/indications/gi, 'indication')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    } else {
+      newQuestion = 'Pick ONE correct answer:';
+    }
+
+    let newType: QuizQuestion['type'] = 'clinical_pearl';
+    if (lower.includes('side effect') || lower.includes('adverse') || lower.includes('ae')) {
+      newType = 'side_effect';
+    } else if (lower.includes('indication') || lower.includes('used for') || lower.includes('use')) {
+      newType = 'indication';
+    }
+
+    return {
+      ...q,
+      type: newType,
+      question: newQuestion,
+      correctAnswer: correct,
+      correctAnswers: undefined,
+      options: opts,
+    };
+  };
+
+  const arrangeQuestionsForDifficultyRamp = (qs: QuizQuestion[]): QuizQuestion[] => {
+    const total = qs.length;
+    if (total <= 1) return qs;
+
+    const tailSlots = Math.min(4, total); // "last 4 questions"
+    const isMulti = (qq: QuizQuestion) => qq.type === 'multi_select';
+
+    const multi = qs.filter(isMulti);
+    const nonMulti = qs.filter((qq) => !isMulti(qq));
+
+    // If there are too many multi-select questions, keep only up to 4 and convert the overflow
+    // into single-answer items (still relevant, but less discouraging).
+    const phasePriority: Record<string, number> = { quiz: 3, mastery: 3, review: 2, intro: 1 };
+    const multiSorted = [...multi].sort((a, b) => {
+      const pa = phasePriority[a.phase ?? ''] ?? 0;
+      const pb = phasePriority[b.phase ?? ''] ?? 0;
+      if (pa !== pb) return pb - pa;
+      return Math.random() - 0.5;
+    });
+
+    const keptMulti = multiSorted.slice(0, tailSlots);
+    const overflow = multiSorted.slice(tailSlots).map(convertOverflowMultiSelectToSingle);
+
+    const nonMultiAll = [...nonMulti, ...overflow];
+
+    // Sort the non-multi portion from easier → harder (tie-break with randomness).
+    const nonMultiSorted = [...nonMultiAll]
+      .map((q) => ({ q, d: difficultyOf(q), r: Math.random() }))
+      .sort((a, b) => a.d - b.d || a.r - b.r)
+      .map((x) => x.q);
+
+    // Multi-select questions are always placed at the end so they only appear within the last 4.
+    return [...nonMultiSorted, ...keptMulti];
+  };
+
+
   const [questions] = useState<QuizQuestion[]>(() => {
     if (mode === 'mistakes' && mistakesParam) {
       try {
         const parsed = JSON.parse(mistakesParam) as MistakeBankEntry[];
         console.log(`[Lesson] Generating ${parsed.length} mistake questions`);
-        return generateMistakeQuestions(parsed, 10);
+        return arrangeQuestionsForDifficultyRamp(generateMistakeQuestions(parsed, 10));
       } catch (e) {
         console.log('[Lesson] Failed to parse mistakes JSON', e);
-        return generatePracticeQuestions(10, getUnlockedLessonDrugIds());
+        return arrangeQuestionsForDifficultyRamp(generatePracticeQuestions(10, getUnlockedLessonDrugIds()));
       }
     }
     if (mode === 'mistakes-review' && mistakesDrugIdsParam) {
       try {
         const drugIds = JSON.parse(mistakesDrugIdsParam) as string[];
         console.log(`[Lesson] Generating review for ${drugIds.length} mistake drugs`);
-        return generateMistakeReviewQuestions(drugIds, 10);
+        return arrangeQuestionsForDifficultyRamp(generateMistakeReviewQuestions(drugIds, 10));
       } catch (e) {
         console.log('[Lesson] Failed to parse mistake drug IDs', e);
-        return generatePracticeQuestions(10, getUnlockedLessonDrugIds());
+        return arrangeQuestionsForDifficultyRamp(generatePracticeQuestions(10, getUnlockedLessonDrugIds()));
       }
     }
     if (isSpaced) {
@@ -154,15 +284,15 @@ export default function LessonScreen() {
       const unlockedSet = new Set(unlocked);
       const due = getDueForReviewDrugIds().filter((id) => unlockedSet.has(id));
       const low = getLowMasteryDrugIds().filter((id) => unlockedSet.has(id));
-      return generateSpacedRepetitionQuestions(due, low, 10, unlocked);
+      return arrangeQuestionsForDifficultyRamp(generateSpacedRepetitionQuestions(due, low, 10, unlocked));
     }
     if (isBrandBlitz) {
       const unlocked = getUnlockedLessonDrugIds();
-      return generateBrandBlitzQuestions(unlocked, 15);
+      return arrangeQuestionsForDifficultyRamp(generateBrandBlitzQuestions(unlocked, 15));
     }
     if (mode === 'practice') {
       const unlocked = Array.from(new Set(getUnlockedLessonDrugIds()));
-      if (unlocked.length === 0) return generatePracticeQuestions(10);
+      if (unlocked.length === 0) return arrangeQuestionsForDifficultyRamp(generatePracticeQuestions(10));
 
       // Adaptive practice: prioritize what's due + low mastery, then fill from unlocked pool.
       const unlockedSet = new Set(unlocked);
@@ -178,14 +308,14 @@ export default function LessonScreen() {
         selected.push(...shuffledRemaining.slice(0, 10 - selected.length));
       }
 
-      return generatePracticeQuestions(10, selected.length > 0 ? selected : unlocked);
+      return arrangeQuestionsForDifficultyRamp(generatePracticeQuestions(10, selected.length > 0 ? selected : unlocked));
     }
     if (isEndgame) {
-      return generateEndGameQuestions(15);
+      return arrangeQuestionsForDifficultyRamp(generateEndGameQuestions(15));
     }
     if (mode === 'mastery' && chapter) {
       const chapterDrugIds = Array.from(new Set(chapter.parts.flatMap(p => p.drugIds)));
-      return generateMasteringQuestions(chapterDrugIds, 30);
+      return arrangeQuestionsForDifficultyRamp(generateMasteringQuestions(chapterDrugIds, 30));
     }
     if (part) {
       const introAll = getIntroQuestionsForPart(part.id, part.drugIds);
@@ -217,7 +347,7 @@ export default function LessonScreen() {
         reviewCount > 0 ? generateQuestionsFromDrugIds(reviewDrugIds, reviewCount, 'review') : [];
 
       const mixed = [...quizQuestions, ...reviewQuestions].sort(() => Math.random() - 0.5);
-      return [...introQuestions, ...mixed];
+      return arrangeQuestionsForDifficultyRamp([...introQuestions, ...mixed]);
     }
     return [];
   });
