@@ -65,8 +65,10 @@ export default function LearnScreen() {
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
             {/* Avatar placeholder (user-customizable in the future) */}
-            <MascotAnimated mood="waving" size={58} />
-            <View>
+            <View style={styles.avatarWrap}>
+              <MascotAnimated mood="waving" size={70} />
+            </View>
+            <View style={styles.headerTextWrap}>
               <Text style={styles.headerTitle}>PharmaLingo</Text>
               <Text style={styles.headerSubtitle}>Top 300 Drugs</Text>
             </View>
@@ -187,7 +189,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 14 },
+
+  avatarWrap: { marginTop: 6 },
+  headerTextWrap: { paddingTop: 2 },
 
   headerTitle: {
     fontSize: 28,
