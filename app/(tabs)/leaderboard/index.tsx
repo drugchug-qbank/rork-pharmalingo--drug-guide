@@ -46,11 +46,20 @@ import ProfessionLeaderboardTab from '@/components/ProfessionLeaderboardTab';
 import StreakFlameIcon from '@/components/StreakFlameIcon';
 import XPIcon from '@/components/XPIcon';
 import UserAvatar from "@/components/UserAvatar";
+import MascotAnimated from '@/components/MascotAnimated';
+import AvatarHead from '@/components/AvatarHead';
 
 interface LeagueRow {
   user_id: string;
   display_name: string;
+
+  // Old fallback (used until Supabase sends avatar_id)
   avatar_emoji: string;
+
+  // NEW: real avatar fields (headshot)
+  avatar_id: string | null;
+  avatar_color: string | null;
+
   xp_this_week: number;
   level: number;
   streak: number;
@@ -279,26 +288,44 @@ export default function LeaderboardScreen() {
   // ---------------------------
   const leagueQuery = useQuery<LeagueRow[]>({
     queryKey: ['leaderboard', 'league'],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_my_league_leaderboard');
-      if (error) throw error;
+queryFn: async () => {
+  // Try the new RPC (includes avatar_id/avatar_color).
+  // If it doesn't exist yet, fall back to the old emoji-only RPC.
+  let data: any[] = [];
 
-      const rows = (data ?? []).map((row: any) => {
-        const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
-        return {
-          user_id: row.user_id ?? row.id ?? '',
-          display_name: row.display_name ?? row.username ?? 'Unknown',
-          avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
-          xp_this_week: isNaN(xpValue) ? 0 : xpValue,
-          level: Number(row.level ?? row.lvl ?? 1),
-          streak: Number(row.streak ?? row.current_streak ?? row.streak_days ?? 0),
-          rank: Number(row.rank ?? row.position ?? 0),
-          is_me: row.is_me ?? row.is_current_user ?? false,
-        } as LeagueRow;
-      });
+  const v2 = await supabase.rpc('get_my_league_leaderboard_with_avatar');
+  if (!v2.error && Array.isArray(v2.data)) {
+    data = v2.data;
+  } else {
+    const v1 = await supabase.rpc('get_my_league_leaderboard');
+    if (v1.error) throw v1.error;
+    data = Array.isArray(v1.data) ? v1.data : [];
+  }
 
-      return rows;
-    },
+  const rows = (data ?? []).map((row: any) => {
+    const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
+
+    return {
+      user_id: row.user_id ?? row.id ?? '',
+      display_name: row.display_name ?? row.username ?? 'Unknown',
+
+      // Keep emoji fallback
+      avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
+
+      // NEW fields (only present if v2 RPC exists)
+      avatar_id: row.avatar_id ?? null,
+      avatar_color: row.avatar_color ?? null,
+
+      xp_this_week: isNaN(xpValue) ? 0 : xpValue,
+      level: Number(row.level ?? row.lvl ?? 1),
+      streak: Number(row.streak ?? row.current_streak ?? row.streak_days ?? 0),
+      rank: Number(row.rank ?? row.position ?? 0),
+      is_me: row.is_me ?? row.is_current_user ?? false,
+    } as LeagueRow;
+  });
+
+  return rows;
+},
     enabled: !!session && isFocused && activeTab === 'league',
     staleTime: 30_000,
     refetchOnMount: 'always' as const,
@@ -693,9 +720,22 @@ export default function LeaderboardScreen() {
           )}
         </View>
 
-        <View style={[styles.avatarCircle, isTop3 && { borderColor: getMedalColor(rank) }]}>
-          <Text style={styles.avatarText}>{row.avatar_emoji || '👤'}</Text>
-        </View>
+{row.is_me ? (
+  // Always show YOUR real selected avatar (even if backend is still emoji-only)
+  <View style={{ marginLeft: 8 }}>
+    <UserAvatar variant="head" size={42} />
+  </View>
+) : row.avatar_id ? (
+  // Other users (only works once backend sends avatar_id)
+  <View style={{ marginLeft: 8 }}>
+    <AvatarHead avatarId={row.avatar_id} avatarColor={row.avatar_color} size={42} />
+  </View>
+) : (
+  // Fallback (until backend is updated)
+  <View style={[styles.avatarCircle, isTop3 && { borderColor: getMedalColor(rank) }]}>
+    <Text style={styles.avatarText}>{row.avatar_emoji || '👤'}</Text>
+  </View>
+)}
 
         <View style={styles.userInfo}>
           <Text style={styles.userName}>
@@ -1136,10 +1176,16 @@ export default function LeaderboardScreen() {
                       return (
                         <View key={u.user_id} style={styles.podiumItem}>
                           <View style={styles.podiumCard}>
-                            <View style={[styles.podiumAvatar, { borderColor: getMedalColor(rank) }]}>
-                              <Text style={styles.podiumAvatarText}>{u.avatar_emoji || '👤'}</Text>
-                              {rank === 1 && <Crown size={18} color="#FFD700" style={styles.crownIcon} />}
-                            </View>
+<View style={[styles.podiumAvatar, { borderColor: getMedalColor(rank) }]}>
+  {u.is_me ? (
+    <UserAvatar variant="head" size={50} />
+  ) : u.avatar_id ? (
+    <AvatarHead avatarId={u.avatar_id} avatarColor={u.avatar_color} size={50} />
+  ) : (
+    <Text style={styles.podiumAvatarText}>{u.avatar_emoji || '👤'}</Text>
+  )}
+  {rank === 1 && <Crown size={18} color="#FFD700" style={styles.crownIcon} />}
+</View>
                             <Text style={styles.podiumName} numberOfLines={1}>
                               {u.display_name}
                               {u.is_me ? ' (You)' : ''}
