@@ -5,6 +5,7 @@ import { supabase } from "@/utils/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { AVATARS } from "@/constants/avatars";
 import AvatarHead from "@/components/AvatarHead";
+import { AVATARS, DEFAULT_AVATAR_ID } from "@/constants/avatars";
 
 type Props = {
   variant?: "head" | "full";
@@ -61,7 +62,7 @@ export default function UserAvatar({
     staleTime: 60_000,
   });
 
-  const finalAvatarId = (avatarId ?? data?.avatar_id ?? "beaver") || "beaver";
+  const finalAvatarId = (avatarId ?? data?.avatar_id ?? DEFAULT_AVATAR_ID) || DEFAULT_AVATAR_ID;
   const finalColor = safeColor(avatarColor ?? data?.avatar_color);
 
   const avatar = AVATARS.find((a) => a.id === finalAvatarId) ?? AVATARS[0];
