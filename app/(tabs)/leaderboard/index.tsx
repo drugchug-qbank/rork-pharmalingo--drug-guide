@@ -1120,7 +1120,7 @@ export default function LeaderboardScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.calloutTitle}>Demotion</Text>
                     <Text style={styles.calloutSubtitle}>
-                      Bottom 5 get demoted{currentTier === 'Bronze' ? " (you're safe in Bronze)" : ''}.
+                      Bottom 10 get demoted{currentTier === 'Bronze' ? " (you're safe in Bronze)" : ''}.
                     </Text>
                   </View>
                 </View>
