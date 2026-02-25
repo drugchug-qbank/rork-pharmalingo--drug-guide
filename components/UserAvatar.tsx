@@ -3,7 +3,6 @@ import { Image, View, StyleProp, ViewStyle } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/utils/supabase";
 import { useAuth } from "@/contexts/AuthContext";
-import { AVATARS } from "@/constants/avatars";
 import AvatarHead from "@/components/AvatarHead";
 import { AVATARS, DEFAULT_AVATAR_ID } from "@/constants/avatars";
 
