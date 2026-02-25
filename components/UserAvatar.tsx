@@ -1,64 +1,113 @@
 import React from "react";
-import { View, ViewStyle } from "react-native";
+import { Image, View, StyleProp, ViewStyle } from "react-native";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/utils/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { AVATARS } from "@/constants/avatars";
 import AvatarHead from "@/components/AvatarHead";
-import AvatarFull from "@/components/AvatarFull";
 
 type Props = {
   variant?: "head" | "full";
   size?: number;
-  shape?: "circle" | "rounded"; // only applies to "full"
-  style?: ViewStyle;
+  shape?: "circle" | "rounded" | "square";
+  style?: StyleProp<ViewStyle>;
+
+  // Optional override (useful for showing other users without extra queries)
+  avatarId?: string | null;
+  avatarColor?: string | null;
+
+  // Optional: render another user's avatar by id (friends list, leaderboard, etc.)
+  userId?: string;
+
+  // Optional zoom control
+  zoom?: number;
 };
 
-/**
- * Renders the CURRENT signed-in user's avatar.
- * - Uses profile.avatar_id + profile.avatar_color if present
- * - Falls back to cat + light blue if missing
- */
+function safeColor(input?: string | null) {
+  const c = (input ?? "").trim();
+  return c.length > 0 ? c : "#FFFFFF";
+}
+
 export default function UserAvatar({
   variant = "head",
   size = 44,
   shape = "circle",
   style,
+  avatarId,
+  avatarColor,
+  userId,
+  zoom,
 }: Props) {
-  const auth = useAuth() as any;
+  const { session } = useAuth();
 
-  // Different apps name this differently; this makes it tolerant.
-  const profile =
-    auth?.profile ??
-    auth?.userProfile ??
-    auth?.user_data ??
-    auth?.user ??
-    auth?.currentUser ??
-    null;
+  const effectiveUserId = userId ?? session?.user?.id ?? null;
 
-  const avatarId =
-    profile?.avatar_id ??
-    profile?.avatarId ??
-    "cat";
+  // Only fetch if we weren't given avatarId/avatarColor explicitly
+  const shouldFetch = !!effectiveUserId && (!avatarId || !avatarColor);
 
-  const avatarColor =
-    profile?.avatar_color ??
-    profile?.avatarColor ??
-    "#EAF6FF";
+  const { data } = useQuery({
+    queryKey: ["profile-avatar", effectiveUserId],
+    enabled: shouldFetch,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("avatar_id, avatar_color")
+        .eq("id", effectiveUserId)
+        .single();
 
-  if (variant === "full") {
+      if (error) throw error;
+      return data as { avatar_id: string | null; avatar_color: string | null };
+    },
+    staleTime: 60_000,
+  });
+
+  const finalAvatarId = (avatarId ?? data?.avatar_id ?? "beaver") || "beaver";
+  const finalColor = safeColor(avatarColor ?? data?.avatar_color);
+
+  const avatar = AVATARS.find((a) => a.id === finalAvatarId) ?? AVATARS[0];
+
+  const borderRadius =
+    shape === "circle" ? size / 2 : shape === "rounded" ? Math.round(size * 0.22) : 0;
+
+  if (variant === "head") {
+    // Use your AvatarHead component (already has zoom fix)
     return (
-      <AvatarFull
-        avatarId={avatarId}
-        avatarColor={avatarColor}
+      <AvatarHead
+        avatarId={finalAvatarId}
+        avatarColor={finalColor}
         size={size}
-        shape={shape}
+        // if you pass zoom, AvatarHead can use it; otherwise it uses its default
+        zoom={zoom}
         style={style}
       />
     );
   }
 
-  // AvatarHead doesn't take style, so we wrap it
+  // Full avatar
   return (
-    <View style={style}>
-      <AvatarHead avatarId={avatarId} avatarColor={avatarColor} size={size} />
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius,
+          overflow: "hidden",
+          backgroundColor: finalColor,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        style,
+      ]}
+    >
+      <Image
+        source={avatar.full}
+        style={{
+          width: size,
+          height: size,
+          transform: [{ scale: zoom ?? 1.12 }],
+        }}
+        resizeMode="cover"
+      />
     </View>
   );
 }
