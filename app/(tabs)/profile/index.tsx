@@ -48,6 +48,7 @@ import MascotAnimated from '@/components/MascotAnimated';
 import StreakFlameIcon from '@/components/StreakFlameIcon';
 import AvatarHead from '@/components/AvatarHead';
 import UserAvatar from '@/components/UserAvatar';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type StreakStatus = 'extended' | 'at_risk' | 'lost';
 
