@@ -77,7 +77,6 @@ interface FriendRow {
   mutual_count?: number; // optional for backward compatibility
 }
 
-
 interface FriendRequestRow {
   request_id: string;
   direction: 'incoming' | 'outgoing';
@@ -87,7 +86,6 @@ interface FriendRequestRow {
   avatar_url: string | null;
   created_at: string;
 }
-
 
 interface SearchUserRow {
   user_id: string;
@@ -120,15 +118,12 @@ function safeNum(v: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-
 function normalizeHandle(input: string): string {
   const raw = (input ?? '').trim();
   if (!raw) return '';
   const noAt = raw.startsWith('@') ? raw.slice(1) : raw;
   return noAt.trim().toLowerCase();
 }
-
-
 
 type OutlinedTextProps = {
   text: string;
@@ -137,7 +132,12 @@ type OutlinedTextProps = {
   strokeWidth?: number;
 };
 
-function OutlinedText({ text, style, strokeColor = '#0B0B0B', strokeWidth = 1.25 }: OutlinedTextProps) {
+function OutlinedText({
+  text,
+  style,
+  strokeColor = '#0B0B0B',
+  strokeWidth = 1.25,
+}: OutlinedTextProps) {
   // Simple cross-platform outline via layered text (works on iOS/Android/Web)
   const offsets: Array<[number, number]> = [
     [-1, 0],
@@ -201,7 +201,6 @@ export default function LeaderboardScreen() {
     const t = setTimeout(() => setDebouncedSearch(normalizedSearchInput), 250);
     return () => clearTimeout(t);
   }, [normalizedSearchInput]);
-
 
   const contentFade = useRef(new Animated.Value(1)).current;
   const [weekCountdown, setWeekCountdown] = useState<string>('');
@@ -340,7 +339,6 @@ export default function LeaderboardScreen() {
   // ---------------------------
   // Friends Queries
   // ---------------------------
-
   const searchUsersQuery = useQuery<SearchUserRow[]>({
     queryKey: ['friends', 'search', debouncedSearch],
     queryFn: async () => {
@@ -454,7 +452,7 @@ export default function LeaderboardScreen() {
     [friendRequestsQuery.data]
   );
 
-  const selectedFriend = useMemo(
+  useMemo(
     () => (friendsQuery.data ?? []).find((f) => f.friend_user_id === selectedFriendId) ?? null,
     [friendsQuery.data, selectedFriendId]
   );
@@ -500,7 +498,7 @@ export default function LeaderboardScreen() {
     }
   }, [addUsername, refreshFriends, queryClient]);
 
-const handleSendRequestToUsername = useCallback(
+  const handleSendRequestToUsername = useCallback(
     async (username: string) => {
       const handle = normalizeHandle(username);
       if (!handle) return;
@@ -530,7 +528,6 @@ const handleSendRequestToUsername = useCallback(
     },
     [refreshFriends, queryClient]
   );
-
 
   const handleRespondRequest = useCallback(
     async (requestId: string, accept: boolean) => {
@@ -720,7 +717,6 @@ const handleSendRequestToUsername = useCallback(
     );
   };
 
-    
   const renderSearchSuggestion = (u: SearchUserRow) => {
     const label = String(u.display_name ?? u.username ?? 'User');
     const rel = String(u.relationship ?? 'none');
@@ -780,10 +776,7 @@ const handleSendRequestToUsername = useCallback(
 
     return (
       <View key={u.user_id} style={styles.suggestRow}>
-        <Pressable
-          style={styles.suggestLeftPress}
-          onPress={() => setAddUsername(`@${u.username}`)}
-        >
+        <Pressable style={styles.suggestLeftPress} onPress={() => setAddUsername(`@${u.username}`)}>
           <View style={styles.avatarCircleSmall}>
             <Text style={styles.avatarTextSmall}>👤</Text>
           </View>
@@ -800,7 +793,7 @@ const handleSendRequestToUsername = useCallback(
     );
   };
 
-const renderFriendItem = (friend: FriendRow, index: number) => {
+  const renderFriendItem = (friend: FriendRow, index: number) => {
     const isSelected = selectedFriendId === friend.friend_user_id;
     const label = friend.display_name || friend.username;
 
@@ -808,10 +801,7 @@ const renderFriendItem = (friend: FriendRow, index: number) => {
     const mutualLabel = mutual === 1 ? '1 mutual' : `${mutual} mutual`;
 
     const renderRightActions = () => (
-      <Pressable
-        style={styles.swipeActionRemove}
-        onPress={() => handleRemoveFriend(friend.friend_user_id, label)}
-      >
+      <Pressable style={styles.swipeActionRemove} onPress={() => handleRemoveFriend(friend.friend_user_id, label)}>
         <Trash2 size={18} color="#fff" />
         <Text style={styles.swipeActionText}>Remove</Text>
       </Pressable>
@@ -886,26 +876,14 @@ const renderFriendItem = (friend: FriendRow, index: number) => {
 
     if (r.direction === 'outgoing') {
       const renderRightActions = () => (
-        <Pressable
-          style={styles.swipeActionCancel}
-          disabled={busy}
-          onPress={() => handleCancelRequest(r.request_id)}
-        >
-          {busy ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <XCircle size={18} color="#fff" />
-          )}
+        <Pressable style={styles.swipeActionCancel} disabled={busy} onPress={() => handleCancelRequest(r.request_id)}>
+          {busy ? <ActivityIndicator size="small" color="#fff" /> : <XCircle size={18} color="#fff" />}
           <Text style={styles.swipeActionText}>Cancel</Text>
         </Pressable>
       );
 
       return (
-        <Swipeable
-          key={r.request_id}
-          renderRightActions={renderRightActions}
-          overshootRight={false}
-        >
+        <Swipeable key={r.request_id} renderRightActions={renderRightActions} overshootRight={false}>
           <View style={styles.requestRow}>
             <View style={styles.requestLeft}>
               <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
@@ -946,11 +924,7 @@ const renderFriendItem = (friend: FriendRow, index: number) => {
             disabled={busy}
             onPress={() => handleRespondRequest(r.request_id, true)}
           >
-            {busy ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <CheckCircle2 size={18} color="#fff" />
-            )}
+            {busy ? <ActivityIndicator size="small" color="#fff" /> : <CheckCircle2 size={18} color="#fff" />}
           </Pressable>
 
           <Pressable
@@ -959,18 +933,14 @@ const renderFriendItem = (friend: FriendRow, index: number) => {
             disabled={busy}
             onPress={() => handleRespondRequest(r.request_id, false)}
           >
-            {busy ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <XCircle size={18} color="#fff" />
-            )}
+            {busy ? <ActivityIndicator size="small" color="#fff" /> : <XCircle size={18} color="#fff" />}
           </Pressable>
         </View>
       </View>
     );
   };
 
-const renderLoadingState = (label = 'Loading...') => (
+  const renderLoadingState = (label = 'Loading...') => (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color={Colors.primary} />
       <Text style={styles.loadingText}>{label}</Text>
@@ -988,7 +958,7 @@ const renderLoadingState = (label = 'Loading...') => (
     </View>
   );
 
-    // ---------------------------
+  // ---------------------------
   // League derived values (clean + consistent)
   // ---------------------------
   const leagueRows = leagueQuery.data ?? [];
@@ -1003,7 +973,6 @@ const renderLoadingState = (label = 'Loading...') => (
   const restLeague = leagueRows.filter((r) => r.rank > 3);
   const friends = friendsQuery.data ?? [];
 
-
   const TABS: Array<{ key: Tab; label: string; Icon: any }> = [
     { key: 'league', label: 'League', Icon: Trophy },
     { key: 'friends', label: 'Friends', Icon: Users },
@@ -1013,10 +982,7 @@ const renderLoadingState = (label = 'Loading...') => (
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[Colors.primary, Colors.primaryDark]}
-        style={[styles.header, { paddingTop: insets.top + 8 }]}
-      >
+      <LinearGradient colors={[Colors.primary, Colors.primaryDark]} style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.headerTitle}>Leaderboard</Text>
@@ -1036,28 +1002,33 @@ const renderLoadingState = (label = 'Loading...') => (
           </Text>
         </Animated.View>
 
+        {/* ✅ FIXED HEADER VALUES */}
         <View style={styles.yourRankCard}>
           <View style={styles.yourRankLeft}>
             <OutlinedText
-              text={`#${leagueRank}`}
+              text={`#${headerLeagueRank}`}
               style={styles.yourRankValue}
               strokeColor="#0B0B0B"
               strokeWidth={1.35}
             />
             <Text style={styles.yourRankLabel}>League Rank</Text>
           </View>
+
           <View style={styles.yourRankDivider} />
+
           <View style={styles.yourRankRight}>
             <XPIcon size={16} />
-            <Text style={styles.yourXpValue}>{progress.stats.xpThisWeek}</Text>
+            <Text style={styles.yourXpValue}>{safeNum(headerXpThisWeek).toLocaleString()}</Text>
             <Text style={styles.yourXpLabel}>This Week</Text>
           </View>
+
           <View style={styles.yourRankDivider} />
+
           <View style={styles.yourRankRight}>
             <View style={styles.streakIconCircle}>
               <StreakFlameIcon size={18} />
             </View>
-            <Text style={styles.yourXpValue}>{progress.stats.streakCurrent}</Text>
+            <Text style={styles.yourXpValue}>{safeNum(headerStreak)}</Text>
             <Text style={styles.yourXpLabel}>Streak</Text>
           </View>
         </View>
@@ -1069,15 +1040,9 @@ const renderLoadingState = (label = 'Loading...') => (
             const iconColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.95)';
             const textColor = isActive ? Colors.primaryDark : 'rgba(255,255,255,0.95)';
             return (
-              <Pressable
-                key={key}
-                style={[styles.tab, isActive && styles.tabActive]}
-                onPress={() => switchTab(key)}
-              >
+              <Pressable key={key} style={[styles.tab, isActive && styles.tabActive]} onPress={() => switchTab(key)}>
                 <Icon size={18} color={iconColor} />
-                <Text style={[styles.tabText, { color: textColor }, isActive && styles.tabTextActive]}>
-                  {label}
-                </Text>
+                <Text style={[styles.tabText, { color: textColor }, isActive && styles.tabTextActive]}>{label}</Text>
               </Pressable>
             );
           })}
@@ -1088,22 +1053,14 @@ const renderLoadingState = (label = 'Loading...') => (
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={pullRefreshing}
-              onRefresh={handlePullRefresh}
-              tintColor={Colors.primary}
-            />
-          }
+          refreshControl={<RefreshControl refreshing={pullRefreshing} onRefresh={handlePullRefresh} tintColor={Colors.primary} />}
         >
           {/* ------------------- LEAGUE TAB ------------------- */}
           {activeTab === 'league' ? (
             leagueQuery.isLoading ? (
               renderLoadingState('Loading league...')
             ) : leagueQuery.isError ? (
-              renderErrorState(`League error: ${(leagueQuery.error as any)?.message ?? 'Unknown error'}`, () =>
-                leagueQuery.refetch()
-              )
+              renderErrorState(`League error: ${(leagueQuery.error as any)?.message ?? 'Unknown error'}`, () => leagueQuery.refetch())
             ) : (
               <>
                 {proximityMessage && (
@@ -1143,7 +1100,7 @@ const renderLoadingState = (label = 'Loading...') => (
                   </View>
                 )}
 
-                <View style={[styles.callout, styles.calloutSuccess]}> 
+                <View style={[styles.callout, styles.calloutSuccess]}>
                   <View style={[styles.calloutIcon, { backgroundColor: Colors.successLight }]}>
                     <TrendingUp size={18} color={Colors.success} />
                   </View>
@@ -1156,7 +1113,7 @@ const renderLoadingState = (label = 'Loading...') => (
                   </View>
                 </View>
 
-                <View style={[styles.callout, styles.calloutUrgent]}> 
+                <View style={[styles.callout, styles.calloutUrgent]}>
                   <View style={[styles.calloutIcon, { backgroundColor: Colors.errorLight }]}>
                     <AlertTriangle size={18} color={Colors.error} />
                   </View>
@@ -1179,7 +1136,7 @@ const renderLoadingState = (label = 'Loading...') => (
                       return (
                         <View key={u.user_id} style={styles.podiumItem}>
                           <View style={styles.podiumCard}>
-                            <View style={[styles.podiumAvatar, { borderColor: getMedalColor(rank) }]}> 
+                            <View style={[styles.podiumAvatar, { borderColor: getMedalColor(rank) }]}>
                               <Text style={styles.podiumAvatarText}>{u.avatar_emoji || '👤'}</Text>
                               {rank === 1 && <Crown size={18} color="#FFD700" style={styles.crownIcon} />}
                             </View>
@@ -1245,8 +1202,7 @@ const renderLoadingState = (label = 'Loading...') => (
               )
             ) : (
               <>
-                
-<View style={styles.addFriendCard}>
+                <View style={styles.addFriendCard}>
                   <View style={styles.addFriendTitleRow}>
                     <UserPlus size={18} color={Colors.primary} />
                     <Text style={styles.addFriendTitle}>Add Friends</Text>
@@ -1304,7 +1260,6 @@ const renderLoadingState = (label = 'Loading...') => (
                     </View>
                   ) : null}
 
-
                   <Pressable style={styles.findFriendsBtn} onPress={handleFindMyFriends}>
                     <Users size={16} color="#fff" />
                     <Text style={styles.findFriendsBtnText}>Find My Friends</Text>
@@ -1353,10 +1308,7 @@ const renderLoadingState = (label = 'Loading...') => (
             schoolQuery.isLoading ? (
               renderLoadingState('Loading schools...')
             ) : schoolQuery.isError ? (
-              renderErrorState(
-                `School error: ${(schoolQuery.error as any)?.message ?? 'Unknown error'}`,
-                () => schoolQuery.refetch()
-              )
+              renderErrorState(`School error: ${(schoolQuery.error as any)?.message ?? 'Unknown error'}`, () => schoolQuery.refetch())
             ) : (
               <>
                 {progress.stats.selectedSchoolId ? (
@@ -1477,11 +1429,7 @@ const renderLoadingState = (label = 'Loading...') => (
         </ScrollView>
       </Animated.View>
 
-      <LeagueWeekResultsModal
-        visible={leagueWeekResult !== null}
-        result={leagueWeekResult}
-        onDismiss={dismissLeagueResult}
-      />
+      <LeagueWeekResultsModal visible={leagueWeekResult !== null} result={leagueWeekResult} onDismiss={dismissLeagueResult} />
     </View>
   );
 }
@@ -1816,19 +1764,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
 
-  friendsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-    backgroundColor: Colors.primaryLight,
-    padding: 16,
-    borderRadius: 18,
-  },
-  friendsHeaderText: { flex: 1 },
-  friendsTitle: { fontSize: 15, fontWeight: '900' as const, color: Colors.text },
-  friendsSubtitle: { fontSize: 13, color: Colors.textSecondary, marginTop: 2, fontWeight: '500' as const },
-
   addFriendCard: {
     backgroundColor: Colors.surface,
     borderRadius: 18,
@@ -1874,6 +1809,9 @@ const styles = StyleSheet.create({
   },
   suggestLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12 },
   suggestLoadingText: { color: Colors.textSecondary, fontWeight: '700' as const, fontSize: 12 },
+
+  suggestHintText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
+  suggestErrorSubText: { color: Colors.textTertiary, fontWeight: '600' as const, fontSize: 11, paddingHorizontal: 12, paddingBottom: 12 },
 
   suggestErrorText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
   suggestEmptyText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
@@ -1946,7 +1884,6 @@ const styles = StyleSheet.create({
   },
   suggestPillWarnText: { fontSize: 11, fontWeight: '900' as const, color: Colors.warning },
 
-
   findFriendsBtn: {
     marginTop: 2,
     flexDirection: 'row',
@@ -1980,12 +1917,36 @@ const styles = StyleSheet.create({
   requestInfo: { flex: 1 },
   requestName: { fontSize: 14, fontWeight: '900' as const, color: Colors.text },
   requestHandle: { fontSize: 12, fontWeight: '700' as const, color: Colors.textTertiary, marginTop: 2 },
-  requestButtons: { flexDirection: 'row', gap: 8 },
-  requestBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 },
-  requestBtnText: { color: '#fff', fontWeight: '900' as const },
-  acceptBtn: { backgroundColor: '#16A34A' },
-  declineBtn: { backgroundColor: '#DC2626' },
-  cancelBtn: { backgroundColor: Colors.textTertiary },
+
+  requestActionsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  iconActionBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconActionAccept: { backgroundColor: Colors.success },
+  iconActionDecline: { backgroundColor: Colors.error },
+
+  pendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  pendingText: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: Colors.textSecondary,
+  },
 
   friendItem: {
     flexDirection: 'row',
@@ -2003,29 +1964,93 @@ const styles = StyleSheet.create({
   rankPillText: { fontSize: 12, fontWeight: '900' as const, color: Colors.textSecondary },
 
   friendInfo: { flex: 1, marginLeft: 12 },
-  friendMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
   friendHandle: { fontSize: 11, color: Colors.textTertiary, fontWeight: '700' as const },
 
-  friendRight: { alignItems: 'center', gap: 6 },
-  friendStreakBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: Colors.accentLight, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-  friendStreakNum: { fontSize: 11, fontWeight: '900' as const, color: Colors.accent },
-
-  expandedSection: { paddingHorizontal: 4, marginBottom: 12 },
-  friendActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 10 },
-  removeFriendBtn: {
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 6,
+  },
+  badgePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: Colors.errorLight,
-    borderWidth: 1,
-    borderColor: Colors.error,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
+    gap: 6,
+    backgroundColor: Colors.goldLight,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  removeFriendText: { color: Colors.error, fontWeight: '900' as const },
+  badgePillMuted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: '#92400E',
+  },
+  badgeTextMuted: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: Colors.textSecondary,
+  },
 
-  // School styles
+  friendRight: { alignItems: 'center', gap: 6 },
+  friendStreakBadgeLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.accentLight,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.25)',
+    gap: 6,
+  },
+  friendStreakNumLarge: {
+    fontSize: 14,
+    fontWeight: '900' as const,
+    color: Colors.accent,
+  },
+  friendStreakSuffix: {
+    fontSize: 12,
+    fontWeight: '800' as const,
+    color: Colors.accent,
+  },
+
+  expandedSection: { paddingHorizontal: 4, marginBottom: 12 },
+
+  swipeActionRemove: {
+    width: 96,
+    backgroundColor: Colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginVertical: 6,
+    borderRadius: 14,
+  },
+  swipeActionCancel: {
+    width: 96,
+    backgroundColor: Colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginVertical: 6,
+    borderRadius: 14,
+  },
+  swipeActionText: {
+    fontSize: 12,
+    fontWeight: '900' as const,
+    color: '#fff',
+  },
+
+  // School styles (kept as-is)
   schoolHeaderCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2101,123 +2126,10 @@ const styles = StyleSheet.create({
   privacyNote: { marginTop: 12, padding: 14, backgroundColor: Colors.surface, borderRadius: 14, borderWidth: 1, borderColor: Colors.surfaceAlt },
   privacyText: { fontSize: 12, fontWeight: '500' as const, color: Colors.textTertiary, lineHeight: 18, textAlign: 'center' as const },
 
-  // --- Friend polish (compact buttons, swipe actions, badges) ---
   sectionHintText: {
     marginTop: 6,
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.textTertiary,
   },
-
-  badgeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 6,
-  },
-  badgePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.goldLight,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  badgePillMuted: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '800' as const,
-    color: '#92400E',
-  },
-  badgeTextMuted: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: Colors.textSecondary,
-  },
-
-  friendStreakBadgeLarge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.accentLight,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.25)',
-    gap: 6,
-  },
-  friendStreakNumLarge: {
-    fontSize: 14,
-    fontWeight: '900' as const,
-    color: Colors.accent,
-  },
-  friendStreakSuffix: {
-    fontSize: 12,
-    fontWeight: '800' as const,
-    color: Colors.accent,
-  },
-
-  requestActionsCompact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  iconActionBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconActionAccept: { backgroundColor: Colors.success },
-  iconActionDecline: { backgroundColor: Colors.error },
-
-  pendingPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  pendingText: {
-    fontSize: 12,
-    fontWeight: '800' as const,
-    color: Colors.textSecondary,
-  },
-
-  swipeActionRemove: {
-    width: 96,
-    backgroundColor: Colors.error,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginVertical: 6,
-    borderRadius: 14,
-  },
-  swipeActionCancel: {
-    width: 96,
-    backgroundColor: Colors.error,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginVertical: 6,
-    borderRadius: 14,
-  },
-  swipeActionText: {
-    fontSize: 12,
-    fontWeight: '900' as const,
-    color: '#fff',
-  },
-
 });
