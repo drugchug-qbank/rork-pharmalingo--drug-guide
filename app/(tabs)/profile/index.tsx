@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import {
   Target,
   BookOpen,
@@ -48,8 +49,6 @@ import MascotAnimated from '@/components/MascotAnimated';
 import StreakFlameIcon from '@/components/StreakFlameIcon';
 import AvatarHead from '@/components/AvatarHead';
 import UserAvatar from '@/components/UserAvatar';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 
 type StreakStatus = 'extended' | 'at_risk' | 'lost';
 
@@ -108,6 +107,7 @@ function formatMonthEnd(dateStr?: string | null): string | null {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const {
     progress,
     accuracy,
@@ -118,7 +118,6 @@ export default function ProfileScreen() {
     toggleReminders,
     endWeekNow,
   } = useProgress();
-  const router = useRouter();
   const { profile, signOut, refreshProfile } = useAuth();
   const { pendingCount, isSyncing } = useXpSync();
 
@@ -867,7 +866,6 @@ month_end: String(r.month_end ?? ''),
           )}
         </View>
       </Modal>
-      
       {/* School Modal */}
       <Modal
         visible={schoolModalVisible}
