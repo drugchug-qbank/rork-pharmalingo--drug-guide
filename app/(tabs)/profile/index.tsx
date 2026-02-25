@@ -49,6 +49,7 @@ import StreakFlameIcon from '@/components/StreakFlameIcon';
 import AvatarHead from '@/components/AvatarHead';
 import UserAvatar from '@/components/UserAvatar';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 
 type StreakStatus = 'extended' | 'at_risk' | 'lost';
 
@@ -117,6 +118,7 @@ export default function ProfileScreen() {
     toggleReminders,
     endWeekNow,
   } = useProgress();
+  const router = useRouter();
   const { profile, signOut, refreshProfile } = useAuth();
   const { pendingCount, isSyncing } = useXpSync();
 
@@ -865,19 +867,6 @@ month_end: String(r.month_end ?? ''),
           )}
         </View>
       </Modal>
-
-<Pressable
-  style={styles.infoCard}
-  onPress={() => router.push("/avatar-picker")}
->
-  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-    <UserAvatar variant="head" size={44} />
-    <View style={{ flex: 1 }}>
-      <Text style={styles.infoCardLabel}>AVATAR</Text>
-      <Text style={styles.infoCardValue}>Tap to change your avatar</Text>
-    </View>
-  </View>
-</Pressable>
       
       {/* School Modal */}
       <Modal
