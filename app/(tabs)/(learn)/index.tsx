@@ -11,6 +11,7 @@ import { chapters } from '@/constants/chapters';
 import { useProgress } from '@/contexts/ProgressContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStreakStatus } from '@/hooks/useStreakStatus';
+import UserAvatar from "@/components/UserAvatar";
 
 import ChapterNode from '@/components/ChapterNode';
 import MascotAnimated from '@/components/MascotAnimated';
