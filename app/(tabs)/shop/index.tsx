@@ -2,11 +2,13 @@ import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Animated, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Heart, Coins, Play, Sparkles, ShoppingBag, Gift, Shield, Clock } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useProgress } from '@/contexts/ProgressContext';
 import XPIcon from '@/components/XPIcon';
+import UserAvatar from '@/components/UserAvatar';
 
 interface ShopItemProps {
   icon: React.ReactNode;
@@ -103,6 +105,7 @@ const ShopItem = React.memo(function ShopItem({
 
 export default function ShopScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { progress, buyHeartWithCoins, buyFullRefillWithCoins, watchAdForHeart, buyStreakSave, heartCountdownSeconds, getMaxStreakSaves } = useProgress();
   const [watchingAd, setWatchingAd] = useState<boolean>(false);
   const heartsFull = progress.stats.hearts >= progress.stats.heartsMax;
@@ -224,6 +227,19 @@ export default function ShopScreen() {
             </Text>
           </View>
         )}
+
+        <Text style={styles.sectionTitle}>🧑‍🎨 Avatar</Text>
+        <Text style={styles.sectionDesc}>Customize your character and background color.</Text>
+
+        <ShopItem
+          icon={<UserAvatar variant="head" size={36} />}
+          title="Customize Avatar"
+          description="Pick an avatar + color"
+          price="FREE"
+          priceType="free"
+          onPress={() => router.push('/profile/avatar')}
+          highlight
+        />
 
         <Text style={styles.sectionTitle}>❤️ Hearts</Text>
         <Text style={styles.sectionDesc}>

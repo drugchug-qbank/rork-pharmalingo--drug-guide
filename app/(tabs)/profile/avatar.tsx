@@ -1,24 +1,34 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, CheckCircle2 } from 'lucide-react-native';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import Colors from '@/constants/colors';
-import { AVATARS } from '@/constants/avatars';
 import { supabase } from '@/utils/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { AVATARS, DEFAULT_AVATAR_ID } from '@/constants/avatars';
 import AvatarHead from '@/components/AvatarHead';
 import UserAvatar from '@/components/UserAvatar';
 
-type ProfileAvatar = { avatar_id: string | null; avatar_color: string | null };
+// Simple preset palette (we can expand later)
+const AVATAR_COLOR_OPTIONS: string[] = [
+  '#FFFFFF', // default
+  '#F8FAFC',
+  '#E2E8F0',
+  '#FDE68A',
+  '#FED7AA',
+  '#BBF7D0',
+  '#A7F3D0',
+  '#BAE6FD',
+  '#C7D2FE',
+  '#FBCFE8',
+];
 
-function safeId(input?: string | null) {
-  const v = (input ?? '').trim();
-  if (!v) return AVATARS[0]?.id ?? 'cat';
-  return v;
+function safeColor(input?: string | null) {
+  const c = (input ?? '').trim();
+  return c.length > 0 ? c : '#FFFFFF';
 }
 
 export default function AvatarPickerScreen() {
@@ -27,12 +37,13 @@ export default function AvatarPickerScreen() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
 
-  const userId = session?.user?.id ?? null;
+  const userId = session?.user?.id;
 
+  // --- Load current profile avatar ---
   const profileQuery = useQuery({
     queryKey: ['profile-avatar', userId],
     enabled: !!userId,
-    queryFn: async (): Promise<ProfileAvatar> => {
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('avatar_id, avatar_color')
@@ -40,39 +51,57 @@ export default function AvatarPickerScreen() {
         .single();
 
       if (error) throw error;
-      return { avatar_id: data?.avatar_id ?? null, avatar_color: data?.avatar_color ?? null };
+      return data as { avatar_id: string | null; avatar_color: string | null };
     },
     staleTime: 60_000,
   });
 
-  const initialAvatarId = useMemo(() => safeId(profileQuery.data?.avatar_id), [profileQuery.data?.avatar_id]);
+  // --- Local selection state ---
+  const initialAvatarId = useMemo(() => {
+    const raw = profileQuery.data?.avatar_id;
+    const safeId = raw && AVATARS.some((a) => a.id === raw) ? raw : null;
+    return safeId ?? DEFAULT_AVATAR_ID;
+  }, [profileQuery.data?.avatar_id]);
 
-  const [selectedId, setSelectedId] = useState<string>(initialAvatarId);
+  const initialColor = useMemo(() => safeColor(profileQuery.data?.avatar_color), [profileQuery.data?.avatar_color]);
 
-  // Keep selection synced once query loads (first paint)
-  React.useEffect(() => {
-    if (!profileQuery.data) return;
-    setSelectedId(safeId(profileQuery.data.avatar_id));
-  }, [profileQuery.data]);
+  const [selectedId, setSelectedId] = useState<string>(DEFAULT_AVATAR_ID);
+  const [selectedColor, setSelectedColor] = useState<string>('#FFFFFF');
+  const [didInit, setDidInit] = useState(false);
 
+  useEffect(() => {
+    // Initialize from profile once, when loaded
+    if (didInit) return;
+    if (profileQuery.isLoading) return;
+
+    setSelectedId(initialAvatarId);
+    setSelectedColor(initialColor);
+    setDidInit(true);
+  }, [didInit, profileQuery.isLoading, initialAvatarId, initialColor]);
+
+  // --- Save mutation ---
   const saveMutation = useMutation({
-    mutationFn: async (nextId: string) => {
+    mutationFn: async (vars: { avatarId: string; avatarColor: string }) => {
       if (!userId) throw new Error('Not signed in');
 
-      // ✅ Default background is WHITE unless you later add a color picker.
-      // NOTE: avatar_color is NOT NULL in the DB, so we must write a real color value.
       const { error } = await supabase
         .from('profiles')
-        .update({ avatar_id: nextId, avatar_color: '#FFFFFF' })
+        .update({
+          avatar_id: vars.avatarId,
+          // IMPORTANT: avatar_color is NOT NULL in DB, so we ALWAYS send a real color.
+          avatar_color: safeColor(vars.avatarColor),
+        })
         .eq('id', userId);
 
       if (error) throw error;
-      return true;
     },
     onSuccess: async () => {
-      // Refresh every place that uses the avatar query
+      // Refresh caches so all tabs update
       await queryClient.invalidateQueries({ queryKey: ['profile-avatar', userId] });
-      Alert.alert('Saved', 'Your avatar was updated!');
+      await queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+      await queryClient.invalidateQueries({ queryKey: ['friends'] });
+      await queryClient.invalidateQueries({ queryKey: ['progress'] });
+
       router.back();
     },
     onError: (e: any) => {
@@ -81,86 +110,102 @@ export default function AvatarPickerScreen() {
   });
 
   const handleSave = () => {
-    if (saveMutation.isPending) return;
-    saveMutation.mutate(selectedId);
+    saveMutation.mutate({ avatarId: selectedId, avatarColor: selectedColor });
   };
+
+  const headerPad = insets.top + 10;
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[Colors.primary, Colors.primaryDark]}
-        style={[styles.header, { paddingTop: insets.top + 10 }]}
-      >
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={22} color="#FFFFFF" />
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
-
+      <LinearGradient colors={[Colors.primary, Colors.primaryDark]} style={[styles.header, { paddingTop: headerPad }]}>
         <Text style={styles.title}>Choose your avatar</Text>
-        <Text style={styles.subtitle}>Pick a character. (Colors coming next.)</Text>
-
-        <View style={styles.previewRow}>
-          <UserAvatar variant="head" size={78} />
-          <View style={{ width: 12 }} />
-          <UserAvatar variant="full" size={78} shape="rounded" />
-        </View>
+        <Text style={styles.subtitle}>Pick a character + background color</Text>
       </LinearGradient>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {profileQuery.isLoading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingText}>Loading avatars…</Text>
+        {/* Preview */}
+        <View style={styles.previewRow}>
+          <View style={styles.previewCard}>
+            <Text style={styles.previewLabel}>Head</Text>
+            <AvatarHead avatarId={selectedId} avatarColor={selectedColor} size={96} />
           </View>
-        ) : profileQuery.isError ? (
-          <View style={styles.center}>
-            <Text style={styles.errorTitle}>Could not load</Text>
-            <Text style={styles.errorText}>
-              {(profileQuery.error as any)?.message ?? 'Unknown error'}
-            </Text>
+          <View style={styles.previewCard}>
+            <Text style={styles.previewLabel}>Full</Text>
+            <UserAvatar
+              avatarId={selectedId}
+              avatarColor={selectedColor}
+              variant="full"
+              size={96}
+              shape="rounded"
+              // a touch of zoom helps fill the frame
+              zoom={1.12}
+            />
           </View>
-        ) : (
-          <View style={styles.grid}>
-            {AVATARS.map((a) => {
-              const isSelected = selectedId === a.id;
+        </View>
+
+        {/* Color picker */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Background color</Text>
+          <View style={styles.colorRow}>
+            {AVATAR_COLOR_OPTIONS.map((c) => {
+              const isSelected = selectedColor.toLowerCase() === c.toLowerCase();
               return (
                 <Pressable
-                  key={a.id}
-                  onPress={() => setSelectedId(a.id)}
-                  style={[styles.tile, isSelected && styles.tileSelected]}
-                >
-                  <View style={styles.tileAvatarWrap}>
-                    <AvatarHead avatarId={a.id} avatarColor="#FFFFFF" size={58} />
-                    {isSelected ? (
-                      <View style={styles.selectedBadge}>
-                        <CheckCircle2 size={16} color="#FFFFFF" />
-                      </View>
-                    ) : null}
-                  </View>
-                  <Text style={styles.tileLabel} numberOfLines={1}>
-                    {a.label}
-                  </Text>
-                </Pressable>
+                  key={c}
+                  onPress={() => setSelectedColor(c)}
+                  style={[
+                    styles.colorSwatch,
+                    { backgroundColor: c },
+                    isSelected && { borderColor: Colors.primary, borderWidth: 3 },
+                    // make white swatches visible
+                    c.toLowerCase() === '#ffffff' && { borderColor: isSelected ? Colors.primary : 'rgba(0,0,0,0.18)' },
+                  ]}
+                  accessibilityLabel={`Select avatar background color ${c}`}
+                />
               );
             })}
           </View>
-        )}
+          <Text style={styles.sectionHint}>Default is white. You can change this any time.</Text>
+        </View>
 
-        <View style={{ height: 16 }} />
+        {/* Avatar grid */}
+        <View style={styles.grid}>
+          {AVATARS.map((a) => {
+            const isSelected = selectedId === a.id;
+            return (
+              <Pressable
+                key={a.id}
+                onPress={() => setSelectedId(a.id)}
+                style={[styles.tile, isSelected && styles.tileSelected]}
+                accessibilityLabel={`Select avatar ${a.label}`}
+              >
+                <AvatarHead avatarId={a.id} avatarColor={selectedColor} size={76} />
+                <Text style={[styles.tileLabel, isSelected && styles.tileLabelSelected]}>{a.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
+        {/* Save */}
         <Pressable
-          style={[styles.saveBtn, saveMutation.isPending && { opacity: 0.7 }]}
+          style={[styles.saveBtn, (saveMutation.isPending || profileQuery.isLoading) && { opacity: 0.7 }]}
           onPress={handleSave}
-          disabled={saveMutation.isPending || !userId}
+          disabled={saveMutation.isPending || profileQuery.isLoading}
         >
           {saveMutation.isPending ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.saveBtnText}>Save Avatar</Text>
           )}
         </Pressable>
 
-        <View style={{ height: 34 }} />
+        {profileQuery.isLoading ? (
+          <View style={{ paddingTop: 10 }}>
+            <ActivityIndicator color={Colors.primary} />
+          </View>
+        ) : null}
+
+        <View style={{ height: 20 }} />
       </ScrollView>
     </View>
   );
@@ -170,75 +215,86 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
 
   header: {
-    paddingHorizontal: 18,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+  },
+  title: { fontSize: 22, fontWeight: '900' as const, color: '#fff' },
+  subtitle: { marginTop: 4, fontSize: 13, fontWeight: '700' as const, color: 'rgba(255,255,255,0.85)' },
+
+  content: {
+    padding: 16,
+    paddingBottom: 30,
   },
 
-  backBtn: {
+  previewRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 6,
+    gap: 12,
+    marginBottom: 14,
   },
-  backText: { color: '#FFFFFF', fontWeight: '800' as const, fontSize: 14 },
+  previewCard: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
+  },
+  previewLabel: { fontSize: 12, fontWeight: '900' as const, color: Colors.textSecondary, marginBottom: 10 },
 
-  title: { color: '#FFFFFF', fontSize: 24, fontWeight: '900' as const, marginTop: 6 },
-  subtitle: { color: 'rgba(255,255,255,0.82)', fontSize: 13, fontWeight: '600' as const, marginTop: 4 },
+  section: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
+    marginBottom: 14,
+  },
+  sectionTitle: { fontSize: 14, fontWeight: '900' as const, color: Colors.text, marginBottom: 10 },
+  sectionHint: { marginTop: 10, fontSize: 12, fontWeight: '600' as const, color: Colors.textTertiary },
 
-  previewRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
-
-  content: { padding: 16 },
-
-  center: { alignItems: 'center', paddingVertical: 50, gap: 12 },
-  loadingText: { color: Colors.textSecondary, fontWeight: '700' as const },
-  errorTitle: { color: Colors.text, fontWeight: '900' as const, fontSize: 16 },
-  errorText: { color: Colors.textSecondary, fontWeight: '600' as const, textAlign: 'center' as const },
+  colorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  colorSwatch: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: 'rgba(0,0,0,0.08)',
+  },
 
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
+    rowGap: 12,
+    marginBottom: 14,
   },
-
   tile: {
-    width: '31%',
+    width: '31.5%',
     backgroundColor: Colors.surface,
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 8,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.primary + '55',
   },
   tileSelected: {
     borderColor: Colors.primary,
     backgroundColor: Colors.primaryLight,
   },
-
-  tileAvatarWrap: { position: 'relative' },
-  selectedBadge: {
-    position: 'absolute',
-    right: -4,
-    top: -4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  tileLabel: { marginTop: 8, fontSize: 12, fontWeight: '800' as const, color: Colors.text },
+  tileLabel: { marginTop: 8, fontSize: 12, fontWeight: '800' as const, color: Colors.textSecondary },
+  tileLabelSelected: { color: Colors.primaryDark },
 
   saveBtn: {
     backgroundColor: Colors.primary,
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  saveBtnText: { color: '#FFFFFF', fontWeight: '900' as const, fontSize: 16 },
+  saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '900' as const },
 });
