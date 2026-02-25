@@ -46,6 +46,7 @@ import { schools, School } from '@/constants/schoolsData';
 import ProgressBar from '@/components/ProgressBar';
 import MascotAnimated from '@/components/MascotAnimated';
 import StreakFlameIcon from '@/components/StreakFlameIcon';
+import AvatarHead from '@/components/AvatarHead';
 
 type StreakStatus = 'extended' | 'at_risk' | 'lost';
 
@@ -646,7 +647,7 @@ month_end: String(r.month_end ?? ''),
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <View style={styles.avatarContainer}>
-          <MascotAnimated mood="happy" size={80} />
+          <AvatarHead avatarId={'cat'} size={96} />
           <View style={styles.levelBadge}>
             <Text style={styles.levelText}>Lv.{progress.level}</Text>
           </View>
