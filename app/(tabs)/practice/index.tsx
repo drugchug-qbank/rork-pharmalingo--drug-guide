@@ -11,6 +11,7 @@ import { getDrugById } from '@/constants/drugData';
 import OutOfHeartsModal from '@/components/OutOfHeartsModal';
 import DrugMasteryCard from '@/components/DrugMasteryCard';
 import XPIcon from '@/components/XPIcon';
+import UserAvatar from "@/components/UserAvatar";
 
 export default function PracticeScreen() {
   const insets = useSafeAreaInsets();
@@ -97,13 +98,25 @@ export default function PracticeScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[Colors.primary, '#0369A1']}
-        style={[styles.header, { paddingTop: insets.top + 8 }]}
-      >
-        <Text style={styles.headerTitle}>Practice 💪</Text>
-        <Text style={styles.headerSubtitle}>Strengthen your knowledge!</Text>
-      </LinearGradient>
+<LinearGradient
+  colors={[Colors.primary, "#0369A1"]}
+  style={[styles.header, { paddingTop: insets.top + 8 }]}
+>
+  <View
+    style={{
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    }}
+  >
+    <View style={{ flex: 1, paddingRight: 12 }}>
+      <Text style={styles.headerTitle}>Practice 💪</Text>
+      <Text style={styles.headerSubtitle}>Strengthen your knowledge!</Text>
+    </View>
+
+    <UserAvatar variant="full" size={56} shape="rounded" />
+  </View>
+</LinearGradient>
 
       <ScrollView
         style={styles.scrollView}
