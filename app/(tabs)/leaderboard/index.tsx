@@ -755,22 +755,39 @@ const leagueQuery = useQuery({
           )}
         </View>
 
-{row.is_me ? (
-  // Always show YOUR real selected avatar (even if backend is still emoji-only)
-  <View style={{ marginLeft: 8 }}>
-    <UserAvatar variant="head" size={42} />
-  </View>
-) : row.avatar_id ? (
-  // Other users (only works once backend sends avatar_id)
-  <View style={{ marginLeft: 8 }}>
-    <AvatarHead avatarId={row.avatar_id} avatarColor={row.avatar_color} size={42} />
-  </View>
-) : (
-  // Fallback (until backend is updated)
-  <View style={[styles.avatarCircle, isTop3 && { borderColor: getMedalColor(rank) }]}>
-    <Text style={styles.avatarText}>{row.avatar_emoji || '👤'}</Text>
-  </View>
-)}
+<View style={{ marginLeft: 8 }}>
+          {row.is_me ? (
+            <UserAvatar
+              variant="head"
+              size={42}
+              style={{
+                borderWidth: 2,
+                borderColor: isTop3 ? getMedalColor(rank) : Colors.surfaceAlt,
+              }}
+            />
+          ) : row.avatar_id ? (
+            <AvatarHead
+              avatarId={row.avatar_id}
+              avatarColor={row.avatar_color}
+              size={42}
+              style={{
+                borderWidth: 2,
+                borderColor: isTop3 ? getMedalColor(rank) : Colors.surfaceAlt,
+              }}
+            />
+          ) : (
+            // Fallback: try to fetch their avatar by user_id (or show default avatar)
+            <UserAvatar
+              variant="head"
+              size={42}
+              userId={row.user_id}
+              style={{
+                borderWidth: 2,
+                borderColor: isTop3 ? getMedalColor(rank) : Colors.surfaceAlt,
+              }}
+            />
+          )}
+        </View>
 
         <View style={styles.userInfo}>
           <Text style={styles.userName}>
@@ -852,9 +869,12 @@ const leagueQuery = useQuery({
     return (
       <View key={u.user_id} style={styles.suggestRow}>
         <Pressable style={styles.suggestLeftPress} onPress={() => setAddUsername(`@${u.username}`)}>
-          <View style={styles.avatarCircleSmall}>
-            <Text style={styles.avatarTextSmall}>👤</Text>
-          </View>
+          <UserAvatar
+            variant="head"
+            size={34}
+            userId={u.user_id}
+            style={{ borderWidth: 1, borderColor: Colors.primary }}
+          />
           <View style={styles.suggestInfo}>
             <Text style={styles.suggestName} numberOfLines={1}>
               {label}
@@ -893,8 +913,13 @@ const leagueQuery = useQuery({
               <Text style={styles.rankPillText}>{index + 1}</Text>
             </View>
 
-            <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
-              <Text style={styles.avatarText}>👤</Text>
+            <View style={{ marginLeft: 8 }}>
+              <UserAvatar
+                variant="head"
+                size={42}
+                userId={friend.friend_user_id}
+                style={{ borderWidth: 2, borderColor: Colors.primary }}
+              />
             </View>
 
             <View style={styles.friendInfo}>
@@ -961,9 +986,12 @@ const leagueQuery = useQuery({
         <Swipeable key={r.request_id} renderRightActions={renderRightActions} overshootRight={false}>
           <View style={styles.requestRow}>
             <View style={styles.requestLeft}>
-              <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
-                <Text style={styles.avatarText}>👤</Text>
-              </View>
+              <UserAvatar
+                variant="head"
+                size={42}
+                userId={r.friend_user_id}
+                style={{ borderWidth: 2, borderColor: Colors.primary }}
+              />
               <View style={styles.requestInfo}>
                 <Text style={styles.requestName}>{label}</Text>
                 <Text style={styles.requestHandle}>@{r.username}</Text>
@@ -983,9 +1011,12 @@ const leagueQuery = useQuery({
     return (
       <View key={r.request_id} style={styles.requestRow}>
         <View style={styles.requestLeft}>
-          <View style={[styles.avatarCircle, { borderColor: Colors.primary }]}>
-            <Text style={styles.avatarText}>👤</Text>
-          </View>
+          <UserAvatar
+                variant="head"
+                size={42}
+                userId={r.friend_user_id}
+                style={{ borderWidth: 2, borderColor: Colors.primary }}
+              />
           <View style={styles.requestInfo}>
             <Text style={styles.requestName}>{label}</Text>
             <Text style={styles.requestHandle}>@{r.username}</Text>
@@ -1217,7 +1248,7 @@ const leagueQuery = useQuery({
   ) : u.avatar_id ? (
     <AvatarHead avatarId={u.avatar_id} avatarColor={u.avatar_color} size={50} />
   ) : (
-    <Text style={styles.podiumAvatarText}>{u.avatar_emoji || '👤'}</Text>
+    <UserAvatar variant="head" size={50} userId={u.user_id} />
   )}
   {rank === 1 && <Crown size={18} color="#FFD700" style={styles.crownIcon} />}
 </View>
