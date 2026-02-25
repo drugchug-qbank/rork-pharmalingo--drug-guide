@@ -47,6 +47,9 @@ import ProgressBar from '@/components/ProgressBar';
 import MascotAnimated from '@/components/MascotAnimated';
 import StreakFlameIcon from '@/components/StreakFlameIcon';
 import AvatarHead from '@/components/AvatarHead';
+import UserAvatar from '@/components/UserAvatar';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 
 type StreakStatus = 'extended' | 'at_risk' | 'lost';
 
@@ -115,6 +118,7 @@ export default function ProfileScreen() {
     toggleReminders,
     endWeekNow,
   } = useProgress();
+  const router = useRouter();
   const { profile, signOut, refreshProfile } = useAuth();
   const { pendingCount, isSyncing } = useXpSync();
 
@@ -647,7 +651,7 @@ month_end: String(r.month_end ?? ''),
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <View style={styles.avatarContainer}>
-          <AvatarHead avatarId={'cat'} size={96} />
+          <UserAvatar variant="head" size={110} shape="circle" />
           <View style={styles.levelBadge}>
             <Text style={styles.levelText}>Lv.{progress.level}</Text>
           </View>
@@ -759,7 +763,30 @@ month_end: String(r.month_end ?? ''),
           </View>
           <ChevronRight size={18} color={Colors.textTertiary} />
         </Pressable>
-
+        
+<Pressable
+  onPress={() => router.push("/profile/avatar")}
+  style={{
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 10,
+    borderWidth: 1.5,
+    borderColor: "rgba(0,0,0,0.08)",
+  }}
+>
+  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+    <UserAvatar variant="head" size={40} shape="circle" />
+    <View style={{ flex: 1 }}>
+      <Text style={{ fontWeight: "900", color: Colors.text }}>Avatar</Text>
+      <Text style={{ marginTop: 2, color: Colors.textSecondary, fontWeight: "600", fontSize: 12 }}>
+        Change your character and color
+      </Text>
+    </View>
+    <Text style={{ color: Colors.textTertiary, fontWeight: "900" }}>›</Text>
+  </View>
+</Pressable>
+        
         {/* (rest of your screen unchanged) */}
         {/* ... */}
         <Pressable style={styles.signOutButton} onPress={handleSignOut} testID="sign-out-button">
@@ -840,7 +867,7 @@ month_end: String(r.month_end ?? ''),
           )}
         </View>
       </Modal>
-
+      
       {/* School Modal */}
       <Modal
         visible={schoolModalVisible}
