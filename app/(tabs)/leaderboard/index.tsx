@@ -302,26 +302,30 @@ queryFn: async () => {
     data = Array.isArray(v1.data) ? v1.data : [];
   }
 
-  const rows = (data ?? []).map((row: any) => {
-    const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
+const rows = (data ?? []).map((row: any) => {
+  const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
 
-    return {
-      user_id: row.user_id ?? row.id ?? '',
-      display_name: row.display_name ?? row.username ?? 'Unknown',
+  return {
+    user_id: row.user_id ?? row.id ?? '',
+    display_name: row.display_name ?? row.username ?? 'Unknown',
 
-      // Keep emoji fallback
-      avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
+    avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
 
-      // NEW fields (only present if v2 RPC exists)
-      avatar_id: row.avatar_id ?? null,
-      avatar_color: row.avatar_color ?? null,
+    avatar_id: row.avatar_id ?? null,
+    avatar_color: row.avatar_color ?? null,
 
-      xp_this_week: isNaN(xpValue) ? 0 : xpValue,
-      level: Number(row.level ?? row.lvl ?? 1),
-      streak: Number(row.streak ?? row.current_streak ?? row.streak_days ?? 0),
-      rank: Number(row.rank ?? row.position ?? 0),
-      is_me: row.is_me ?? row.is_current_user ?? false,
-    } as LeagueRow;
+    xp_this_week: isNaN(xpValue) ? 0 : xpValue,
+    level: Number(row.level ?? row.lvl ?? 1),
+    streak: Number(row.streak ?? row.current_streak ?? row.streak_days ?? 0),
+    rank: Number(row.rank ?? row.position ?? 0),
+    is_me: row.is_me ?? row.is_current_user ?? false,
+  } as LeagueRow;
+});
+
+// ✅ SUPER IMPORTANT: force correct ordering
+rows.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+
+return rows;
   });
 
   return rows;
