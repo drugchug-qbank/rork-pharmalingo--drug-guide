@@ -93,17 +93,35 @@ function normalize(s: string): string {
  * A lightweight normalizer so we can pick "trickier" distractors from similar classes.
  * This does NOT need to be perfect — it just needs to group obvious families.
  */
+function hasWord(haystack: string, word: string): boolean {
+  // Word-boundary-ish match for ASCII letters. Prevents collisions like:
+  // - "decarboxylase" containing "arb"
+  // - "acetaminophen" containing "ace"
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z])${escaped}([^a-z]|$)`).test(haystack);
+}
+
 function classKey(drugClass: string): string {
   const c = normalize(drugClass);
-  if (c.includes('ace')) return 'ace';
-  if (c.includes('arb') || c.includes('angiotensin ii')) return 'arb';
-  if (c.includes('beta')) return 'beta_blocker';
+
+  // More specific checks first (avoid substring collisions).
+  if (c.includes('arni')) return 'arni';
+
+  // ACE inhibitors (avoid matching "acetaminophen").
+  if (c.includes('ace inhibitor') || c.includes('acei') || hasWord(c, 'ace')) return 'ace';
+
+  // ARBs: match token "arb" (not inside other words), plus common phrasing.
+  if (c.includes('angiotensin receptor') || c.includes('angiotensin ii') || hasWord(c, 'arb')) return 'arb';
+
+  // Beta-blockers: avoid beta-lactam antibiotics.
+  if (c.includes('beta-blocker') || c.includes('beta blocker')) return 'beta_blocker';
+
   if (c.includes('calcium channel') || c.includes('ccb') || c.includes('dihydropyridine')) return 'ccb';
   if (c.includes('statin') || c.includes('hmg-coa')) return 'statin';
   if (c.includes('thiazide')) return 'thiazide';
   if (c.includes('loop')) return 'loop';
   if (c.includes('ppi') || c.includes('proton pump')) return 'ppi';
-  if (c.includes('h2') || c.includes('histamine-2')) return 'h2';
+  if (c.includes('h2 blocker') || c.includes('histamine-2')) return 'h2';
   if (c.includes('ssri')) return 'ssri';
   if (c.includes('snri')) return 'snri';
   if (c.includes('benzodiazep')) return 'benzo';
@@ -945,7 +963,6 @@ const GENERATORS: Array<(drug: Drug, pool: Drug[], phase: QuizQuestionPhase) => 
   clinicalPearl,
   trueFalse,
   keyFactToDrug,
-  classComparison,
 ];
 
 
@@ -964,9 +981,9 @@ const MULTI_SELECT_GENERATORS: GeneratorFn[] = [multiSelectIndications, multiSel
 
 const NOT_GENERATORS: GeneratorFn[] = [notIndication, notSideEffect];
 
-const PEARL_GENERATORS: GeneratorFn[] = [clinicalPearl, keyFactToDrug, classComparison];
+const PEARL_GENERATORS: GeneratorFn[] = [clinicalPearl, keyFactToDrug];
 
-const CORE_FILL_GENERATORS: GeneratorFn[] = [suffixQuestion, dosingQuestion, clozeQuestion, keyFactToDrug, classComparison];
+const CORE_FILL_GENERATORS: GeneratorFn[] = [suffixQuestion, dosingQuestion, clozeQuestion, keyFactToDrug];
 
 function clampStars(stars: number): 0 | 1 | 2 | 3 {
   if (stars <= 0) return 0;
@@ -1161,7 +1178,7 @@ export function generateMistakeQuestions(mistakes: MistakeBankEntry[], maxCount:
     dosing: dosingQuestion,
     drug_class: drugClassQuestion,
     key_fact: keyFactToDrug,
-    class_comparison: classComparison,
+    class_comparison: drugClassQuestion,
     suffix: suffixQuestion,
     clinical_pearl: clinicalPearl,
     true_false: trueFalse,
@@ -1215,8 +1232,34 @@ export function generateSpacedRepetitionQuestions(
 }
 
 export function generateMasteringQuestions(drugIds: string[], count: number = 30): QuizQuestion[] {
-  // Mastery quiz: only within the provided pool
-  return generateQuestionsFromDrugIds(drugIds, count, 'mastery');
+  // Mastery quiz: only within the provided pool (30 Qs).
+  // Requirement: include EXACTLY 2 brand↔generic matching questions when possible.
+  const poolIds = unique(drugIds);
+  const pool = getDrugsByIds(poolIds);
+  if (pool.length === 0 || count <= 0) return [];
+
+  const phase: QuizQuestionPhase = 'mastery';
+  const matchingTarget = 2;
+  const matchingCount = pool.length >= 4 ? Math.min(matchingTarget, count) : 0;
+  const baseCount = Math.max(0, count - matchingCount);
+
+  // Base mastery mix (no matching injected by generateQuestionsFromDrugIds for phase='mastery').
+  const base = generateQuestionsFromDrugIds(poolIds, baseCount, phase);
+
+  // Add exactly 2 matching questions (brand → generic).
+  const matches: QuizQuestion[] = [];
+  for (let i = 0; i < matchingCount; i++) {
+    const mq = generateMatchingQuestion(pool, phase);
+    if (mq) matches.push(mq);
+  }
+
+  let combined = [...base, ...matches];
+  if (combined.length < count) {
+    const remaining = count - combined.length;
+    combined = [...combined, ...generateQuestionsFromDrugIds(poolIds, remaining, phase)];
+  }
+
+  return shuffleArray(combined).slice(0, count);
 }
 
 /**
@@ -1290,15 +1333,15 @@ export function generateEndGameQuestions(totalCount: number = 15): QuizQuestion[
     return true;
   });
 
+  const allExternalChoices = unique(bank.flatMap((q) => q.choices ?? []));
   const pickedExternal = shuffleArray(bank).slice(0, Math.min(externalCount, bank.length));
   const externalQuestions: QuizQuestion[] = pickedExternal.map((q) => {
     const correct = q.choices?.[q.answerIndex] ?? q.choices?.[0] ?? '';
-    const options = shuffleArray(dedupeOptions(q.choices ?? []));
+    const raw = dedupeOptions(q.choices ?? []);
+    const base = dedupeOptions([correct, ...raw]);
 
-    // Ensure correct answer is present even after de-dupe.
-    const finalOptions = correct && !options.some((o) => optionKey(o) === optionKey(correct))
-      ? shuffleArray([correct, ...options]).slice(0, Math.max(4, options.length + 1))
-      : options;
+    // Always show ≥4 options (some external items may only provide 2–3).
+    const finalOptions = finalizeOptions(base, 4, allExternalChoices);
 
     return {
       id: uid('ext', q.id),

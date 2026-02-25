@@ -257,6 +257,53 @@ export default function LessonScreen() {
     return [...nonMultiSorted, ...keptMulti];
   };
 
+  const arrangeQuestionsForMasterySprinkle = (qs: QuizQuestion[]): QuizQuestion[] => {
+    const total = qs.length;
+    if (total <= 1) return qs;
+
+    const isMulti = (qq: QuizQuestion) => qq.type === 'multi_select';
+    const multi = shuffle(qs.filter(isMulti));
+    const nonMulti = qs.filter((qq) => !isMulti(qq));
+
+    // Keep an easy→hard ramp, but allow multi-select to appear throughout ("sprinkled")
+    // for mastery/endgame quizzes.
+    const nonMultiSorted = [...nonMulti]
+      .map((q) => ({ q, d: difficultyOf(q), r: Math.random() }))
+      .sort((a, b) => a.d - b.d || a.r - b.r)
+      .map((x) => x.q);
+
+    if (multi.length === 0) return nonMultiSorted;
+
+    // Avoid serving the hardest question types immediately.
+    const minIndex = total > 6 ? 2 : 0;
+    const available = Math.max(1, total - minIndex);
+    const step = available / multi.length;
+
+    const positions: number[] = [];
+    for (let i = 0; i < multi.length; i++) {
+      let pos = Math.floor(minIndex + i * step + step / 2);
+      pos = Math.max(minIndex, Math.min(total - 1, pos));
+
+      // Ensure unique positions (nudge forward/backward if needed).
+      while (positions.includes(pos) && pos < total - 1) pos++;
+      while (positions.includes(pos) && pos > minIndex) pos--;
+      if (!positions.includes(pos)) positions.push(pos);
+    }
+
+    const final: Array<QuizQuestion | null> = Array(total).fill(null);
+    positions.forEach((p, idx) => {
+      final[p] = multi[idx];
+    });
+
+    let cursor = 0;
+    for (let i = 0; i < total; i++) {
+      if (final[i]) continue;
+      final[i] = nonMultiSorted[cursor++];
+    }
+
+    return final.filter(Boolean) as QuizQuestion[];
+  };
+
 
   const [questions] = useState<QuizQuestion[]>(() => {
     if (mode === 'mistakes' && mistakesParam) {
@@ -311,11 +358,11 @@ export default function LessonScreen() {
       return arrangeQuestionsForDifficultyRamp(generatePracticeQuestions(10, selected.length > 0 ? selected : unlocked));
     }
     if (isEndgame) {
-      return arrangeQuestionsForDifficultyRamp(generateEndGameQuestions(15));
+      return arrangeQuestionsForMasterySprinkle(generateEndGameQuestions(15));
     }
     if (mode === 'mastery' && chapter) {
       const chapterDrugIds = Array.from(new Set(chapter.parts.flatMap(p => p.drugIds)));
-      return arrangeQuestionsForDifficultyRamp(generateMasteringQuestions(chapterDrugIds, 30));
+      return arrangeQuestionsForMasterySprinkle(generateMasteringQuestions(chapterDrugIds, 30));
     }
     if (part) {
       const introAll = getIntroQuestionsForPart(part.id, part.drugIds);
