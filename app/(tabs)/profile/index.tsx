@@ -759,7 +759,30 @@ month_end: String(r.month_end ?? ''),
           </View>
           <ChevronRight size={18} color={Colors.textTertiary} />
         </Pressable>
-
+        
+<Pressable
+  onPress={() => router.push("/profile/avatar")}
+  style={{
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 10,
+    borderWidth: 1.5,
+    borderColor: "rgba(0,0,0,0.08)",
+  }}
+>
+  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+    <UserAvatar variant="head" size={40} shape="circle" />
+    <View style={{ flex: 1 }}>
+      <Text style={{ fontWeight: "900", color: Colors.text }}>Avatar</Text>
+      <Text style={{ marginTop: 2, color: Colors.textSecondary, fontWeight: "600", fontSize: 12 }}>
+        Change your character and color
+      </Text>
+    </View>
+    <Text style={{ color: Colors.textTertiary, fontWeight: "900" }}>›</Text>
+  </View>
+</Pressable>
+        
         {/* (rest of your screen unchanged) */}
         {/* ... */}
         <Pressable style={styles.signOutButton} onPress={handleSignOut} testID="sign-out-button">
