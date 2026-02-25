@@ -100,7 +100,7 @@ function getWeekStart(date: Date): string {
 
 const LEAGUE_TIERS: LeagueTier[] = ['Bronze', 'Silver', 'Gold'];
 const PROMOTE_THRESHOLD = 10;
-const DEMOTE_THRESHOLD = 25;
+const DEMOTE_THRESHOLD = 21;
 const TOTAL_LEAGUE_PLAYERS = 30;
 
 function getLeagueRank(xpThisWeek: number, tier: LeagueTier): number {
