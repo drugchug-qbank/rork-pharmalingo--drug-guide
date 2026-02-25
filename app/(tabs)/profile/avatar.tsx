@@ -60,10 +60,10 @@ export default function AvatarPickerScreen() {
       if (!userId) throw new Error('Not signed in');
 
       // ✅ Default background is WHITE unless you later add a color picker.
-      // We intentionally store NULL for avatar_color so your UI defaults to white.
+      // NOTE: avatar_color is NOT NULL in the DB, so we must write a real color value.
       const { error } = await supabase
         .from('profiles')
-        .update({ avatar_id: nextId, avatar_color: null })
+        .update({ avatar_id: nextId, avatar_color: '#FFFFFF' })
         .eq('id', userId);
 
       if (error) throw error;
