@@ -41,11 +41,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/utils/supabase';
 import { LeagueTier } from '@/constants/types';
 import XPComparisonGraph from '@/components/XPComparisonGraph';
-import MascotAnimated from '@/components/MascotAnimated';
 import LeagueWeekResultsModal from '@/components/LeagueResultsModal';
 import ProfessionLeaderboardTab from '@/components/ProfessionLeaderboardTab';
 import StreakFlameIcon from '@/components/StreakFlameIcon';
 import XPIcon from '@/components/XPIcon';
+import UserAvatar from "@/components/UserAvatar";
 
 interface LeagueRow {
   user_id: string;
@@ -991,7 +991,7 @@ export default function LeaderboardScreen() {
               <Text style={[styles.tierPillText, { color: tierConfig.color }]}>{currentTier} League</Text>
             </View>
           </View>
-          <MascotAnimated mood="waving" size={64} />
+          <UserAvatar variant="full" size={64} shape="rounded" />
         </View>
 
         <Animated.View style={[styles.countdownCard, daysLeft <= 1 && { transform: [{ scale: urgencyPulse }] }]}>
