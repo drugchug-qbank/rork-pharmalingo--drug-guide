@@ -47,6 +47,7 @@ import ProgressBar from '@/components/ProgressBar';
 import MascotAnimated from '@/components/MascotAnimated';
 import StreakFlameIcon from '@/components/StreakFlameIcon';
 import AvatarHead from '@/components/AvatarHead';
+import UserAvatar from '@/components/UserAvatar';
 
 type StreakStatus = 'extended' | 'at_risk' | 'lost';
 
