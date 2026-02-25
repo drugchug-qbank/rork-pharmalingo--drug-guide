@@ -286,40 +286,57 @@ export default function LeaderboardScreen() {
   // ---------------------------
   // League Query
   // ---------------------------
-  const leagueQuery = useQuery<LeagueRow[]>({
-    queryKey: ['leaderboard', 'league'],
-queryFn: async () => {
-  // Try the new RPC (includes avatar_id/avatar_color).
-  // If it doesn't exist yet, fall back to the old emoji-only RPC.
-  let data: any[] = [];
+// ---------------------------
+// League Query
+// ---------------------------
+const leagueQuery = useQuery({
+  queryKey: ['leaderboard', 'league'],
+  queryFn: async (): Promise<LeagueRow[]> => {
+    // Try the new RPC (includes avatar_id/avatar_color).
+    // If it doesn't exist yet, fall back to the old emoji-only RPC.
+    let data: any[] = [];
 
-  const v2 = await supabase.rpc('get_my_league_leaderboard_with_avatar');
-  if (!v2.error && Array.isArray(v2.data)) {
-    data = v2.data;
-  } else {
-    const v1 = await supabase.rpc('get_my_league_leaderboard');
-    if (v1.error) throw v1.error;
-    data = Array.isArray(v1.data) ? v1.data : [];
-  }
+    const v2 = await supabase.rpc('get_my_league_leaderboard_with_avatar');
+    if (!v2.error && Array.isArray(v2.data)) {
+      data = v2.data;
+    } else {
+      const v1 = await supabase.rpc('get_my_league_leaderboard');
+      if (v1.error) throw v1.error;
+      data = Array.isArray(v1.data) ? v1.data : [];
+    }
 
-const rows = (data ?? []).map((row: any) => {
-  const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
+    const rows: LeagueRow[] = (data ?? []).map((row: any) => {
+      const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
 
-  return {
-    user_id: row.user_id ?? row.id ?? '',
-    display_name: row.display_name ?? row.username ?? 'Unknown',
+      return {
+        user_id: row.user_id ?? row.id ?? '',
+        display_name: row.display_name ?? row.username ?? 'Unknown',
 
-    avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
+        // Emoji fallback
+        avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
 
-    avatar_id: row.avatar_id ?? null,
-    avatar_color: row.avatar_color ?? null,
+        // New fields (only present if v2 RPC exists)
+        avatar_id: row.avatar_id ?? null,
+        avatar_color: row.avatar_color ?? null,
 
-    xp_this_week: isNaN(xpValue) ? 0 : xpValue,
-    level: Number(row.level ?? row.lvl ?? 1),
-    streak: Number(row.streak ?? row.current_streak ?? row.streak_days ?? 0),
-    rank: Number(row.rank ?? row.position ?? 0),
-    is_me: row.is_me ?? row.is_current_user ?? false,
-  } as LeagueRow;
+        xp_this_week: Number.isFinite(xpValue) ? xpValue : 0,
+        level: Number(row.level ?? row.lvl ?? 1),
+        streak: Number(row.streak ?? row.current_streak ?? row.streak_days ?? 0),
+        rank: Number(row.rank ?? row.position ?? 0),
+        is_me: row.is_me ?? row.is_current_user ?? false,
+      };
+    });
+
+    // ✅ FORCE correct rank ordering (fixes “27th/28th appearing after podium”)
+    rows.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+
+    return rows;
+  },
+  enabled: !!session && isFocused && activeTab === 'league',
+  staleTime: 30_000,
+  refetchOnMount: true,
+  refetchInterval: isFocused && activeTab === 'league' ? 12_000 : false,
+  retry: 2,
 });
 
 // ✅ SUPER IMPORTANT: force correct ordering
