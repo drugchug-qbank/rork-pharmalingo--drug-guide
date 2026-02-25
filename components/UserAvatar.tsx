@@ -1,15 +1,22 @@
-import React, { useMemo } from 'react';
-import { Image, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React from 'react';
+import { Image, View, Text, StyleProp, ViewStyle } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/utils/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { AVATARS, DEFAULT_AVATAR_ID } from '@/constants/avatars';
 import AvatarHead from '@/components/AvatarHead';
 import {
-  AVATAR_ACCESSORIES,
   DEFAULT_AVATAR_ACCESSORY,
-  type AvatarAccessoryId,
+  AvatarAccessoryId,
+  getAccessoryDef,
+  normalizeAccessoryId,
 } from '@/constants/avatarAccessories';
+import {
+  DEFAULT_AVATAR_FRAME,
+  AvatarFrameId,
+  getFrameDef,
+  normalizeFrameId,
+} from '@/constants/avatarFrames';
 
 type Props = {
   variant?: 'head' | 'full';
@@ -21,6 +28,7 @@ type Props = {
   avatarId?: string | null;
   avatarColor?: string | null;
   avatarAccessory?: AvatarAccessoryId | string | null;
+  avatarFrame?: AvatarFrameId | string | null;
 
   // Optional: render another user's avatar by id (friends list, leaderboard, etc.)
   userId?: string;
@@ -34,19 +42,6 @@ function safeColor(input?: string | null) {
   return c.length > 0 ? c : '#FFFFFF';
 }
 
-function normalizeAccessoryId(input?: string | null): AvatarAccessoryId {
-  const raw = (input ?? '').trim();
-  if (!raw) return DEFAULT_AVATAR_ACCESSORY;
-
-  const found = AVATAR_ACCESSORIES.find((a) => a.id === raw);
-  return (found?.id ?? DEFAULT_AVATAR_ACCESSORY) as AvatarAccessoryId;
-}
-
-function getAccessoryEmoji(id?: string | null) {
-  const normalized = normalizeAccessoryId(id);
-  return AVATAR_ACCESSORIES.find((a) => a.id === normalized)?.emoji ?? null;
-}
-
 export default function UserAvatar({
   variant = 'head',
   size = 44,
@@ -55,6 +50,7 @@ export default function UserAvatar({
   avatarId,
   avatarColor,
   avatarAccessory,
+  avatarFrame,
   userId,
   zoom,
 }: Props) {
@@ -62,59 +58,47 @@ export default function UserAvatar({
 
   const effectiveUserId = userId ?? session?.user?.id ?? null;
 
-  // Only fetch if we weren't given avatarId/avatarColor/avatarAccessory explicitly
-  const shouldFetch =
-    !!effectiveUserId && (!avatarId || !avatarColor || typeof avatarAccessory === 'undefined');
+  // Only fetch if we weren't given the data explicitly
+  const shouldFetch = !!effectiveUserId && (!avatarId || !avatarColor || !avatarAccessory || !avatarFrame);
 
   const { data } = useQuery({
     queryKey: ['profile-avatar', effectiveUserId],
     enabled: shouldFetch,
     queryFn: async () => {
-      if (!effectiveUserId) {
-        return {
-          avatar_id: null,
-          avatar_color: null,
-          avatar_accessory: DEFAULT_AVATAR_ACCESSORY,
-        } as any;
-      }
-
-      // Try v2 (with avatar_accessory). If that column doesn't exist yet, fall back.
+      // v2 (has accessory + frame)
       const v2 = await supabase
         .from('profiles')
-        .select('avatar_id, avatar_color, avatar_accessory')
+        .select('avatar_id, avatar_color, avatar_accessory, avatar_frame')
         .eq('id', effectiveUserId)
         .single();
 
-      if (!v2.error) return v2.data as any;
-
-      const msg = String((v2.error as any)?.message ?? '').toLowerCase();
-      if (msg.includes('avatar_accessory') || msg.includes('column') || msg.includes('does not exist')) {
-        const v1 = await supabase
-          .from('profiles')
-          .select('avatar_id, avatar_color')
-          .eq('id', effectiveUserId)
-          .single();
-
-        if (v1.error) throw v1.error;
-
-        return {
-          ...(v1.data as any),
-          avatar_accessory: DEFAULT_AVATAR_ACCESSORY,
-        } as any;
+      if (!v2.error) {
+        return v2.data as {
+          avatar_id: string | null;
+          avatar_color: string | null;
+          avatar_accessory: string | null;
+          avatar_frame: string | null;
+        };
       }
 
-      throw v2.error;
+      // v1 fallback (older DB)
+      const v1 = await supabase.from('profiles').select('avatar_id, avatar_color').eq('id', effectiveUserId).single();
+      if (v1.error) throw v1.error;
+
+      return {
+        avatar_id: (v1.data as any)?.avatar_id ?? null,
+        avatar_color: (v1.data as any)?.avatar_color ?? null,
+        avatar_accessory: DEFAULT_AVATAR_ACCESSORY,
+        avatar_frame: DEFAULT_AVATAR_FRAME,
+      };
     },
     staleTime: 60_000,
   });
 
-  const finalAvatarId = (avatarId ?? (data as any)?.avatar_id ?? DEFAULT_AVATAR_ID) || DEFAULT_AVATAR_ID;
-  const finalColor = safeColor(avatarColor ?? (data as any)?.avatar_color);
-  const finalAccessoryId = normalizeAccessoryId(
-    String(avatarAccessory ?? (data as any)?.avatar_accessory ?? DEFAULT_AVATAR_ACCESSORY)
-  );
-
-  const accessoryEmoji = useMemo(() => getAccessoryEmoji(finalAccessoryId), [finalAccessoryId]);
+  const finalAvatarId = (avatarId ?? data?.avatar_id ?? DEFAULT_AVATAR_ID) || DEFAULT_AVATAR_ID;
+  const finalColor = safeColor(avatarColor ?? data?.avatar_color);
+  const finalAccessoryId = normalizeAccessoryId(avatarAccessory ?? (data as any)?.avatar_accessory ?? DEFAULT_AVATAR_ACCESSORY);
+  const finalFrameId = normalizeFrameId(avatarFrame ?? (data as any)?.avatar_frame ?? DEFAULT_AVATAR_FRAME);
 
   const avatar = AVATARS.find((a) => a.id === finalAvatarId) ?? AVATARS[0];
 
@@ -122,6 +106,7 @@ export default function UserAvatar({
     shape === 'circle' ? size / 2 : shape === 'rounded' ? Math.round(size * 0.22) : 0;
 
   if (variant === 'head') {
+    // Headshot (circle)
     return (
       <AvatarHead
         avatarId={finalAvatarId}
@@ -129,15 +114,21 @@ export default function UserAvatar({
         size={size}
         zoom={zoom}
         accessoryId={finalAccessoryId}
+        frameId={finalFrameId}
         style={style}
       />
     );
   }
 
-  const badgeSize = Math.max(18, Math.round(size * 0.34));
-  const emojiSize = Math.max(11, Math.round(badgeSize * 0.62));
-
   // Full avatar
+  const frame = getFrameDef(finalFrameId);
+  const frameW = Math.max(0, Number(frame.borderWidth ?? 0));
+  const innerSize = Math.max(1, Math.round(size - frameW * 2));
+  const innerRadius =
+    shape === 'circle' ? innerSize / 2 : shape === 'rounded' ? Math.round(innerSize * 0.22) : 0;
+
+  const accessory = getAccessoryDef(finalAccessoryId);
+
   return (
     <View
       style={[
@@ -145,57 +136,55 @@ export default function UserAvatar({
           width: size,
           height: size,
           borderRadius,
-          overflow: 'hidden',
-          backgroundColor: finalColor,
+          borderWidth: frameW,
+          borderColor: frame.borderColor,
           alignItems: 'center',
           justifyContent: 'center',
         },
         style,
       ]}
     >
-      <Image
-        source={avatar.full}
+      <View
         style={{
-          width: size,
-          height: size,
-          transform: [{ scale: zoom ?? 1.12 }],
+          width: innerSize,
+          height: innerSize,
+          borderRadius: innerRadius,
+          overflow: 'hidden',
+          backgroundColor: finalColor,
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
-        resizeMode="cover"
-      />
+      >
+        <Image
+          source={avatar.full}
+          style={{
+            width: innerSize,
+            height: innerSize,
+            transform: [{ scale: zoom ?? 1.12 }],
+          }}
+          resizeMode="cover"
+        />
 
-      {accessoryEmoji ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.accessoryBadge,
-            {
-              width: badgeSize,
-              height: badgeSize,
-              borderRadius: badgeSize / 2,
-              right: Math.max(2, Math.round(size * 0.04)),
-              bottom: Math.max(2, Math.round(size * 0.04)),
-            },
-          ]}
-        >
-          <Text style={{ fontSize: emojiSize, lineHeight: emojiSize + 2 }}>{accessoryEmoji}</Text>
-        </View>
-      ) : null}
+        {finalAccessoryId !== 'none' ? (
+          <View
+            style={{
+              position: 'absolute',
+              right: 3,
+              bottom: 3,
+              minWidth: Math.max(18, Math.round(innerSize * 0.34)),
+              height: Math.max(18, Math.round(innerSize * 0.34)),
+              borderRadius: 999,
+              backgroundColor: 'rgba(255,255,255,0.92)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(0,0,0,0.08)',
+            }}
+          >
+            <Text style={{ fontSize: Math.max(12, Math.round(innerSize * 0.18)) }}>{accessory.emoji}</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  accessoryBadge: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-});

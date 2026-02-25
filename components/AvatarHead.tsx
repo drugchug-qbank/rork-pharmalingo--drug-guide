@@ -1,11 +1,18 @@
-import React, { useMemo } from 'react';
-import { Image, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React from 'react';
+import { Image, View, Text, StyleProp, ViewStyle } from 'react-native';
 import { AVATARS } from '@/constants/avatars';
 import {
-  AVATAR_ACCESSORIES,
   DEFAULT_AVATAR_ACCESSORY,
-  type AvatarAccessoryId,
+  AvatarAccessoryId,
+  getAccessoryDef,
+  normalizeAccessoryId,
 } from '@/constants/avatarAccessories';
+import {
+  DEFAULT_AVATAR_FRAME,
+  AvatarFrameId,
+  getFrameDef,
+  normalizeFrameId,
+} from '@/constants/avatarFrames';
 
 type Props = {
   avatarId: string;
@@ -14,106 +21,92 @@ type Props = {
   style?: StyleProp<ViewStyle>;
   /**
    * Controls how "zoomed" the headshot is inside the circle.
-   * 1.0 = normal, 1.2–1.5 = zoomed in
+   * 1.0 = normal, 1.2–1.6 = zoomed in
    */
   zoom?: number;
-
-  /** Optional cosmetic overlay (emoji accessory). */
+  /** Optional accessory overlay (emoji badge). */
   accessoryId?: AvatarAccessoryId | string | null;
+  /** Optional frame ring around the circle. */
+  frameId?: AvatarFrameId | string | null;
 };
-
-function safeColor(input?: string | null) {
-  const c = (input ?? '').trim();
-  return c.length > 0 ? c : '#FFFFFF';
-}
-
-function normalizeAccessoryId(input?: string | null): AvatarAccessoryId {
-  const raw = (input ?? '').trim();
-  if (!raw) return DEFAULT_AVATAR_ACCESSORY;
-
-  const found = AVATAR_ACCESSORIES.find((a) => a.id === raw);
-  return (found?.id ?? DEFAULT_AVATAR_ACCESSORY) as AvatarAccessoryId;
-}
 
 export default function AvatarHead({
   avatarId,
-  avatarColor,
+  avatarColor = '#FFFFFF',
   size = 44,
   style,
   zoom = 1.35,
-  accessoryId,
+  accessoryId = DEFAULT_AVATAR_ACCESSORY,
+  frameId = DEFAULT_AVATAR_FRAME,
 }: Props) {
   const avatar = AVATARS.find((a) => a.id === avatarId) ?? AVATARS[0];
 
-  const accessoryEmoji = useMemo(() => {
-    const id = normalizeAccessoryId(String(accessoryId ?? ''));
-    return AVATAR_ACCESSORIES.find((a) => a.id === id)?.emoji ?? null;
-  }, [accessoryId]);
+  const finalAccessoryId = normalizeAccessoryId(accessoryId);
+  const accessory = getAccessoryDef(finalAccessoryId);
 
-  const badgeSize = Math.max(16, Math.round(size * 0.38));
-  const emojiSize = Math.max(10, Math.round(badgeSize * 0.62));
+  const finalFrameId = normalizeFrameId(frameId);
+  const frame = getFrameDef(finalFrameId);
+  const frameW = Math.max(0, Number(frame.borderWidth ?? 0));
+
+  const innerSize = Math.max(1, Math.round(size - frameW * 2));
 
   return (
     <View
       style={[
-        styles.container,
         {
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: safeColor(avatarColor),
+          borderWidth: frameW,
+          borderColor: frame.borderColor,
+          alignItems: 'center',
+          justifyContent: 'center',
         },
         style,
       ]}
     >
-      <Image
-        source={avatar.head}
+      <View
         style={{
-          width: size,
-          height: size,
-          transform: [{ scale: zoom }],
+          width: innerSize,
+          height: innerSize,
+          borderRadius: innerSize / 2,
+          overflow: 'hidden',
+          backgroundColor: avatarColor ?? '#FFFFFF',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
-        resizeMode="cover"
-      />
+      >
+        <Image
+          source={avatar.head}
+          style={{
+            width: innerSize,
+            height: innerSize,
+            transform: [{ scale: zoom }],
+          }}
+          resizeMode="cover"
+        />
 
-      {accessoryEmoji ? (
-        <View
-          pointerEvents="none"
-          style={[
-            styles.accessoryBadge,
-            {
-              width: badgeSize,
-              height: badgeSize,
-              borderRadius: badgeSize / 2,
-              right: Math.max(2, Math.round(size * 0.04)),
-              bottom: Math.max(2, Math.round(size * 0.04)),
-            },
-          ]}
-        >
-          <Text style={{ fontSize: emojiSize, lineHeight: emojiSize + 2 }}>{accessoryEmoji}</Text>
-        </View>
-      ) : null}
+        {/* Accessory badge (simple emoji) */}
+        {finalAccessoryId !== 'none' ? (
+          <View
+            style={{
+              position: 'absolute',
+              right: 3,
+              bottom: 3,
+              minWidth: Math.max(18, Math.round(innerSize * 0.34)),
+              height: Math.max(18, Math.round(innerSize * 0.34)),
+              borderRadius: 999,
+              backgroundColor: 'rgba(255,255,255,0.92)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(0,0,0,0.08)',
+            }}
+          >
+            <Text style={{ fontSize: Math.max(12, Math.round(innerSize * 0.18)) }}>{accessory.emoji}</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accessoryBadge: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    shadowColor: '#000',
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-});
