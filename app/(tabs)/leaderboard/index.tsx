@@ -650,26 +650,59 @@ const leagueQuery = useQuery({
   const proximityMessage = useMemo(() => {
     const rows = leagueQuery.data ?? [];
     if (rows.length === 0) return null;
+
     const meRow = rows.find((r) => r.is_me);
     if (!meRow) return null;
 
-    const myRank = meRow.rank;
-    const myXp = meRow.xp_this_week;
+    // League rules
+    const LEAGUE_SIZE = 30;
+    const PROMOTION_CUTOFF = 10; // Top 10 promoted
+    const DEMOTION_COUNT = 10;   // Bottom 10 demoted
+    const SAFE_CUTOFF = LEAGUE_SIZE - DEMOTION_COUNT; // 20 (ranks 21-30 are demotion)
 
-    if (myRank <= 10) {
-      const rank11 = rows.find((r) => r.rank === 11);
+    const myRank = Number(meRow.rank ?? 0);
+    const myXp = Number(meRow.xp_this_week ?? 0);
+
+    // ✅ Promotion zone (Top 10)
+    if (myRank > 0 && myRank <= PROMOTION_CUTOFF) {
+      const rank11 = rows.find((r) => r.rank === PROMOTION_CUTOFF + 1);
       if (rank11) {
-        const lead = myXp - rank11.xp_this_week;
-        if (lead <= 30) return { text: `Only ${lead} XP ahead of demotion zone!`, type: 'warning' as const };
+        const lead = myXp - Number(rank11.xp_this_week ?? 0);
+        if (lead <= 30) {
+          return { text: `Only ${Math.max(0, lead)} XP ahead of #${PROMOTION_CUTOFF + 1}!`, type: 'warning' as const };
+        }
       }
       return { text: `You're in the promotion zone! Keep it up!`, type: 'success' as const };
     }
 
-    const rank10 = rows.find((r) => r.rank === 10);
+    // ✅ Demotion zone (Bottom 10 => ranks 21–30)
+    if (myRank > SAFE_CUTOFF) {
+      const safeRow = rows.find((r) => r.rank === SAFE_CUTOFF);
+      if (safeRow) {
+        const gap = Number(safeRow.xp_this_week ?? 0) - myXp;
+        if (gap <= 50) {
+          return { text: `Only ${Math.max(0, gap)} XP to get out of the demotion zone!`, type: 'urgent' as const };
+        }
+        return { text: `${Math.max(0, gap)} XP to reach safety (Rank #${SAFE_CUTOFF})`, type: 'urgent' as const };
+      }
+      return { text: `You're in the demotion zone — earn XP to reach Rank #${SAFE_CUTOFF}.`, type: 'urgent' as const };
+    }
+
+    // ✅ Middle zone (Ranks 11–20): show distance to Top 10 or warn if close to demotion
+    const rank10 = rows.find((r) => r.rank === PROMOTION_CUTOFF);
     if (rank10) {
-      const gap = rank10.xp_this_week - myXp;
-      if (gap <= 50) return { text: `Only ${gap} XP from Top 10!`, type: 'urgent' as const };
-      return { text: `${gap} XP to reach Top 10`, type: 'info' as const };
+      const gapToTop10 = Number(rank10.xp_this_week ?? 0) - myXp;
+      if (gapToTop10 <= 50) {
+        return { text: `Only ${Math.max(0, gapToTop10)} XP from Top ${PROMOTION_CUTOFF}!`, type: 'urgent' as const };
+      }
+    }
+
+    const rank21 = rows.find((r) => r.rank === SAFE_CUTOFF + 1);
+    if (rank21 && myRank === SAFE_CUTOFF) {
+      const lead = myXp - Number(rank21.xp_this_week ?? 0);
+      if (lead <= 30) {
+        return { text: `Only ${Math.max(0, lead)} XP ahead of the demotion zone!`, type: 'warning' as const };
+      }
     }
 
     return null;
