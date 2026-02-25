@@ -647,7 +647,7 @@ month_end: String(r.month_end ?? ''),
         style={[styles.header, { paddingTop: insets.top + 12 }]}
       >
         <View style={styles.avatarContainer}>
-          <AvatarHead avatarId={'cat'} size={96} />
+          <UserAvatar variant="head" size={110} shape="circle" />
           <View style={styles.levelBadge}>
             <Text style={styles.levelText}>Lv.{progress.level}</Text>
           </View>
