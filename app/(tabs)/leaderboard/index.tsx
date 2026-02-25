@@ -283,17 +283,17 @@ export default function LeaderboardScreen() {
     queryClient.invalidateQueries({ queryKey: ['profession'] });
   }, [isFocused, session, queryClient]);
 
-  // ---------------------------
-  // League Query
-  // ---------------------------
+
+// ---------------------------
+// League Query
+// ---------------------------
 // ---------------------------
 // League Query
 // ---------------------------
 const leagueQuery = useQuery({
   queryKey: ['leaderboard', 'league'],
   queryFn: async (): Promise<LeagueRow[]> => {
-    // Try the new RPC (includes avatar_id/avatar_color).
-    // If it doesn't exist yet, fall back to the old emoji-only RPC.
+    // Try the v2 RPC (avatar_id/avatar_color). If it doesn't exist, fall back to v1.
     let data: any[] = [];
 
     const v2 = await supabase.rpc('get_my_league_leaderboard_with_avatar');
@@ -305,30 +305,26 @@ const leagueQuery = useQuery({
       data = Array.isArray(v1.data) ? v1.data : [];
     }
 
-    const rows: LeagueRow[] = (data ?? []).map((row: any) => {
-      const xpValue = Number(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0);
+    const rows: LeagueRow[] = (data ?? []).map((row: any) => ({
+      user_id: row.user_id ?? row.id ?? '',
+      display_name: row.display_name ?? row.username ?? 'Unknown',
 
-      return {
-        user_id: row.user_id ?? row.id ?? '',
-        display_name: row.display_name ?? row.username ?? 'Unknown',
+      // Emoji fallback
+      avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
 
-        // Emoji fallback
-        avatar_emoji: row.avatar_emoji ?? row.avatar ?? '👤',
+      // New avatar fields (only present if v2 RPC exists)
+      avatar_id: row.avatar_id ?? null,
+      avatar_color: row.avatar_color ?? null,
 
-        // New fields (only present if v2 RPC exists)
-        avatar_id: row.avatar_id ?? null,
-        avatar_color: row.avatar_color ?? null,
+      xp_this_week: safeNum(row.xp_this_week ?? row.weekly_xp ?? row.xp ?? 0),
+      level: Math.max(1, safeNum(row.level ?? row.lvl ?? 1)),
+      streak: safeNum(row.streak ?? row.current_streak ?? row.streak_days ?? 0),
+      rank: Math.max(0, safeNum(row.rank ?? row.position ?? 0)),
+      is_me: row.is_me ?? row.is_current_user ?? false,
+    }));
 
-        xp_this_week: Number.isFinite(xpValue) ? xpValue : 0,
-        level: Number(row.level ?? row.lvl ?? 1),
-        streak: Number(row.streak ?? row.current_streak ?? row.streak_days ?? 0),
-        rank: Number(row.rank ?? row.position ?? 0),
-        is_me: row.is_me ?? row.is_current_user ?? false,
-      };
-    });
-
-    // ✅ FORCE correct rank ordering (fixes “27th/28th appearing after podium”)
-    rows.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+    // ✅ Critical: ensure correct ordering for podium + list (fixes “27th/28th showing early”)
+    rows.sort((a, b) => a.rank - b.rank);
 
     return rows;
   },
@@ -338,21 +334,6 @@ const leagueQuery = useQuery({
   refetchInterval: isFocused && activeTab === 'league' ? 12_000 : false,
   retry: 2,
 });
-
-// ✅ SUPER IMPORTANT: force correct ordering
-rows.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
-
-return rows;
-  });
-
-  return rows;
-},
-    enabled: !!session && isFocused && activeTab === 'league',
-    staleTime: 30_000,
-    refetchOnMount: 'always' as const,
-    refetchInterval: isFocused && activeTab === 'league' ? 12_000 : false,
-    retry: 2,
-  });
 
   // ---------------------------
   // School Query
