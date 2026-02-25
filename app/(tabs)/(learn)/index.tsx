@@ -14,7 +14,6 @@ import { useStreakStatus } from '@/hooks/useStreakStatus';
 import UserAvatar from "@/components/UserAvatar";
 
 import ChapterNode from '@/components/ChapterNode';
-import MascotAnimated from '@/components/MascotAnimated';
 import DailyQuestsCard from '@/components/DailyQuestsCard';
 import StreakPill from '@/components/StreakPill';
 
@@ -65,10 +64,10 @@ export default function LearnScreen() {
       >
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
-            {/* Avatar placeholder (user-customizable in the future) */}
-            <View style={styles.avatarWrap}>
-              <MascotAnimated mood="waving" size={70} />
-            </View>
+{/* User Avatar */}
+<View style={styles.avatarWrap}>
+  <UserAvatar variant="full" size={70} shape="circle" />
+</View>
             <View style={styles.headerTextWrap}>
               <Text style={styles.headerTitle}>PharmaLingo</Text>
               <Text style={styles.headerSubtitle}>Top 300 Drugs</Text>
