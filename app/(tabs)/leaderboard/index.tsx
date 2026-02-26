@@ -81,6 +81,13 @@ interface FriendRow {
   username: string;
   display_name: string;
   avatar_url: string | null;
+
+  // ✅ NEW: avatar fields returned directly from RPC (perf: no N+1 profile queries)
+  avatar_id?: string | null;
+  avatar_color?: string | null;
+  avatar_accessory?: string | null;
+  avatar_frame?: string | null;
+
   weekly_xp: number;
   streak: number;
   mutual_count?: number; // optional for backward compatibility
@@ -93,6 +100,13 @@ interface FriendRequestRow {
   username: string;
   display_name: string;
   avatar_url: string | null;
+
+  // ✅ NEW: avatar fields returned directly from RPC (perf: no N+1 profile queries)
+  avatar_id?: string | null;
+  avatar_color?: string | null;
+  avatar_accessory?: string | null;
+  avatar_frame?: string | null;
+
   created_at: string;
 }
 
@@ -101,6 +115,13 @@ interface SearchUserRow {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+
+  // ✅ NEW: avatar fields returned directly from RPC (perf: no N+1 profile queries)
+  avatar_id?: string | null;
+  avatar_color?: string | null;
+  avatar_accessory?: string | null;
+  avatar_frame?: string | null;
+
   relationship:
     | 'none'
     | 'already_friends'
@@ -368,9 +389,29 @@ const leagueQuery = useQuery({
   // ---------------------------
   // Friends Queries
   // ---------------------------
-  const searchUsersQuery = useQuery<SearchUserRow[]>({
+    const searchUsersQuery = useQuery<SearchUserRow[]>({
     queryKey: ['friends', 'search', debouncedSearch],
     queryFn: async () => {
+      // ✅ PERF: Prefer the RPC that already includes avatar fields (avoids N+1 profile fetches)
+      const v2 = await supabase.rpc('search_users_with_avatar', { p_query: debouncedSearch });
+      if (!v2.error && Array.isArray(v2.data)) {
+        const rows = v2.data;
+        return rows.map((r: any) => ({
+          user_id: String(r.user_id),
+          username: String(r.username ?? ''),
+          display_name: r.display_name ?? null,
+          avatar_url: r.avatar_url ?? null,
+
+          avatar_id: r.avatar_id ?? null,
+          avatar_color: r.avatar_color ?? null,
+          avatar_accessory: r.avatar_accessory ?? null,
+          avatar_frame: r.avatar_frame ?? null,
+
+          relationship: String(r.relationship ?? 'none'),
+        })) as SearchUserRow[];
+      }
+
+      // Fallback to the older RPC (still works, but avatars may require extra queries)
       const { data, error } = await supabase.rpc('search_users', { p_query: debouncedSearch });
       if (error) throw error;
 
@@ -380,6 +421,12 @@ const leagueQuery = useQuery({
         username: String(r.username ?? ''),
         display_name: r.display_name ?? null,
         avatar_url: r.avatar_url ?? null,
+
+        avatar_id: null,
+        avatar_color: null,
+        avatar_accessory: null,
+        avatar_frame: null,
+
         relationship: String(r.relationship ?? 'none'),
       })) as SearchUserRow[];
     },
@@ -392,6 +439,27 @@ const leagueQuery = useQuery({
   const friendsQuery = useQuery<FriendRow[]>({
     queryKey: ['friends', 'list'],
     queryFn: async () => {
+      // ✅ PERF: Prefer v2_with_avatar (already joins profiles → avoids N+1 profile fetches)
+      const v3 = await supabase.rpc('get_my_friends_v2_with_avatar');
+      if (!v3.error && Array.isArray(v3.data)) {
+        const rows = v3.data;
+        return rows.map((r: any) => ({
+          friend_user_id: String(r.friend_user_id),
+          username: String(r.username ?? ''),
+          display_name: String(r.display_name ?? r.username ?? 'Friend'),
+          avatar_url: r.avatar_url ?? null,
+
+          avatar_id: r.avatar_id ?? null,
+          avatar_color: r.avatar_color ?? null,
+          avatar_accessory: r.avatar_accessory ?? null,
+          avatar_frame: r.avatar_frame ?? null,
+
+          weekly_xp: safeNum(r.weekly_xp),
+          streak: safeNum(r.streak),
+          mutual_count: safeNum(r.mutual_count),
+        })) as FriendRow[];
+      }
+
       // Prefer v2 (includes mutual_count). Fallback to v1 if not deployed yet.
       const v2 = await supabase.rpc('get_my_friends_v2');
       if (!v2.error) {
@@ -401,6 +469,12 @@ const leagueQuery = useQuery({
           username: String(r.username ?? ''),
           display_name: String(r.display_name ?? r.username ?? 'Friend'),
           avatar_url: r.avatar_url ?? null,
+
+          avatar_id: null,
+          avatar_color: null,
+          avatar_accessory: null,
+          avatar_frame: null,
+
           weekly_xp: safeNum(r.weekly_xp),
           streak: safeNum(r.streak),
           mutual_count: safeNum(r.mutual_count),
@@ -417,6 +491,12 @@ const leagueQuery = useQuery({
         username: String(r.username ?? ''),
         display_name: String(r.display_name ?? r.username ?? 'Friend'),
         avatar_url: r.avatar_url ?? null,
+
+        avatar_id: null,
+        avatar_color: null,
+        avatar_accessory: null,
+        avatar_frame: null,
+
         weekly_xp: safeNum(r.weekly_xp),
         streak: safeNum(r.streak),
         mutual_count: 0,
@@ -432,6 +512,28 @@ const leagueQuery = useQuery({
   const friendRequestsQuery = useQuery<FriendRequestRow[]>({
     queryKey: ['friends', 'requests'],
     queryFn: async () => {
+      // ✅ PERF: Prefer the RPC that already includes avatar fields (avoids N+1 profile fetches)
+      const v2 = await supabase.rpc('get_my_friend_requests_with_avatar');
+      if (!v2.error && Array.isArray(v2.data)) {
+        const rows = v2.data;
+        return rows.map((r: any) => ({
+          request_id: String(r.request_id),
+          direction: (r.direction ?? 'incoming') as 'incoming' | 'outgoing',
+          friend_user_id: String(r.friend_user_id),
+          username: String(r.username ?? ''),
+          display_name: String(r.display_name ?? r.username ?? 'User'),
+          avatar_url: r.avatar_url ?? null,
+
+          avatar_id: r.avatar_id ?? null,
+          avatar_color: r.avatar_color ?? null,
+          avatar_accessory: r.avatar_accessory ?? null,
+          avatar_frame: r.avatar_frame ?? null,
+
+          created_at: String(r.created_at ?? ''),
+        })) as FriendRequestRow[];
+      }
+
+      // Fallback to the older RPC (still works, but avatars may require extra queries)
       const { data, error } = await supabase.rpc('get_my_friend_requests');
       if (error) throw error;
 
@@ -442,6 +544,12 @@ const leagueQuery = useQuery({
         username: String(r.username ?? ''),
         display_name: String(r.display_name ?? r.username ?? 'User'),
         avatar_url: r.avatar_url ?? null,
+
+        avatar_id: null,
+        avatar_color: null,
+        avatar_accessory: null,
+        avatar_frame: null,
+
         created_at: String(r.created_at ?? ''),
       })) as FriendRequestRow[];
     },
@@ -869,12 +977,22 @@ const leagueQuery = useQuery({
     return (
       <View key={u.user_id} style={styles.suggestRow}>
         <Pressable style={styles.suggestLeftPress} onPress={() => setAddUsername(`@${u.username}`)}>
-          <UserAvatar
-            variant="head"
-            size={34}
-            userId={u.user_id}
-            style={{ borderWidth: 1, borderColor: Colors.primary }}
-          />
+          {u.avatar_id ? (
+            <AvatarHead
+              avatarId={u.avatar_id ?? 'beaver'}
+              avatarColor={u.avatar_color}
+              accessoryId={u.avatar_accessory}
+              frameId={u.avatar_frame}
+              size={34}
+            />
+          ) : (
+            <UserAvatar
+              variant="head"
+              size={34}
+              userId={u.user_id}
+              style={{ borderWidth: 1, borderColor: Colors.primary }}
+            />
+          )}
           <View style={styles.suggestInfo}>
             <Text style={styles.suggestName} numberOfLines={1}>
               {label}
@@ -914,12 +1032,22 @@ const leagueQuery = useQuery({
             </View>
 
             <View style={{ marginLeft: 8 }}>
-              <UserAvatar
-                variant="head"
-                size={42}
-                userId={friend.friend_user_id}
-                style={{ borderWidth: 2, borderColor: Colors.primary }}
-              />
+              {friend.avatar_id ? (
+                <AvatarHead
+                  avatarId={friend.avatar_id ?? 'beaver'}
+                  avatarColor={friend.avatar_color}
+                  accessoryId={friend.avatar_accessory}
+                  frameId={friend.avatar_frame}
+                  size={42}
+                />
+              ) : (
+                <UserAvatar
+                  variant="head"
+                  size={42}
+                  userId={friend.friend_user_id}
+                  style={{ borderWidth: 2, borderColor: Colors.primary }}
+                />
+              )}
             </View>
 
             <View style={styles.friendInfo}>
@@ -986,12 +1114,22 @@ const leagueQuery = useQuery({
         <Swipeable key={r.request_id} renderRightActions={renderRightActions} overshootRight={false}>
           <View style={styles.requestRow}>
             <View style={styles.requestLeft}>
-              <UserAvatar
-                variant="head"
-                size={42}
-                userId={r.friend_user_id}
-                style={{ borderWidth: 2, borderColor: Colors.primary }}
-              />
+              {r.avatar_id ? (
+  <AvatarHead
+    avatarId={r.avatar_id ?? 'beaver'}
+    avatarColor={r.avatar_color}
+    accessoryId={r.avatar_accessory}
+    frameId={r.avatar_frame}
+    size={42}
+  />
+) : (
+  <UserAvatar
+    variant="head"
+    size={42}
+    userId={r.friend_user_id}
+    style={{ borderWidth: 2, borderColor: Colors.primary }}
+  />
+)}
               <View style={styles.requestInfo}>
                 <Text style={styles.requestName}>{label}</Text>
                 <Text style={styles.requestHandle}>@{r.username}</Text>
@@ -1011,12 +1149,22 @@ const leagueQuery = useQuery({
     return (
       <View key={r.request_id} style={styles.requestRow}>
         <View style={styles.requestLeft}>
-          <UserAvatar
-                variant="head"
-                size={42}
-                userId={r.friend_user_id}
-                style={{ borderWidth: 2, borderColor: Colors.primary }}
-              />
+          {r.avatar_id ? (
+  <AvatarHead
+    avatarId={r.avatar_id ?? 'beaver'}
+    avatarColor={r.avatar_color}
+    accessoryId={r.avatar_accessory}
+    frameId={r.avatar_frame}
+    size={42}
+  />
+) : (
+  <UserAvatar
+    variant="head"
+    size={42}
+    userId={r.friend_user_id}
+    style={{ borderWidth: 2, borderColor: Colors.primary }}
+  />
+)}
           <View style={styles.requestInfo}>
             <Text style={styles.requestName}>{label}</Text>
             <Text style={styles.requestHandle}>@{r.username}</Text>
