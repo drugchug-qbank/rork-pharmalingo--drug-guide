@@ -1,22 +1,14 @@
 import React from 'react';
-import { Image, View, Text, StyleProp, ViewStyle } from 'react-native';
+import { Image, View, StyleProp, ViewStyle } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+
 import { supabase } from '@/utils/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { AVATARS, DEFAULT_AVATAR_ID } from '@/constants/avatars';
 import AvatarHead from '@/components/AvatarHead';
-import {
-  DEFAULT_AVATAR_ACCESSORY,
-  AvatarAccessoryId,
-  getAccessoryDef,
-  normalizeAccessoryId,
-} from '@/constants/avatarAccessories';
-import {
-  DEFAULT_AVATAR_FRAME,
-  AvatarFrameId,
-  getFrameDef,
-  normalizeFrameId,
-} from '@/constants/avatarFrames';
+import { DEFAULT_AVATAR_ACCESSORY, normalizeAccessoryId } from '@/constants/avatarAccessories';
+import { DEFAULT_AVATAR_FRAME, normalizeFrameId } from '@/constants/avatarFrames';
+import { DEFAULT_AVATAR_EYES_ID, DEFAULT_AVATAR_MOUTH_ID, normalizeEyesId, normalizeMouthId } from '@/constants/avatarFaceParts';
 
 type Props = {
   variant?: 'head' | 'full';
@@ -27,8 +19,10 @@ type Props = {
   // Optional override (useful for showing other users without extra queries)
   avatarId?: string | null;
   avatarColor?: string | null;
-  avatarAccessory?: AvatarAccessoryId | string | null;
-  avatarFrame?: AvatarFrameId | string | null;
+  avatarAccessory?: string | null;
+  avatarFrame?: string | null;
+  avatarEyes?: string | null;
+  avatarMouth?: string | null;
 
   // Optional: render another user's avatar by id (friends list, leaderboard, etc.)
   userId?: string;
@@ -37,9 +31,17 @@ type Props = {
   zoom?: number;
 };
 
-function safeColor(input?: string | null) {
-  const c = (input ?? '').trim();
-  return c.length > 0 ? c : '#FFFFFF';
+function safeHexColor(input?: string | null, fallback = '#FFFFFF') {
+  const raw = String(input ?? '').trim();
+  if (!raw) return fallback;
+  if (/^#[0-9A-Fa-f]{6}$/.test(raw)) return raw.toUpperCase();
+  if (/^#[0-9A-Fa-f]{3}$/.test(raw)) {
+    const r = raw[1];
+    const g = raw[2];
+    const b = raw[3];
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+  return fallback;
 }
 
 export default function UserAvatar({
@@ -51,6 +53,8 @@ export default function UserAvatar({
   avatarColor,
   avatarAccessory,
   avatarFrame,
+  avatarEyes,
+  avatarMouth,
   userId,
   zoom,
 }: Props) {
@@ -58,77 +62,90 @@ export default function UserAvatar({
 
   const effectiveUserId = userId ?? session?.user?.id ?? null;
 
-  // Only fetch if we weren't given the data explicitly
-  const shouldFetch = !!effectiveUserId && (!avatarId || !avatarColor || !avatarAccessory || !avatarFrame);
+  // Only fetch if we weren't given the avatar fields explicitly
+  const shouldFetch =
+    !!effectiveUserId &&
+    (avatarId === undefined ||
+      avatarColor === undefined ||
+      avatarAccessory === undefined ||
+      avatarFrame === undefined ||
+      avatarEyes === undefined ||
+      avatarMouth === undefined);
 
   const { data } = useQuery({
     queryKey: ['profile-avatar', effectiveUserId],
     enabled: shouldFetch,
     queryFn: async () => {
-      // v2 (has accessory + frame)
-      const v2 = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .select('avatar_id, avatar_color, avatar_accessory, avatar_frame')
+        .select(
+          'avatar_id, avatar_color, avatar_accessory, avatar_frame, avatar_eyes, avatar_mouth'
+        )
         .eq('id', effectiveUserId)
         .single();
 
-      if (!v2.error) {
-        return v2.data as {
-          avatar_id: string | null;
-          avatar_color: string | null;
-          avatar_accessory: string | null;
-          avatar_frame: string | null;
-        };
-      }
-
-      // v1 fallback (older DB)
-      const v1 = await supabase.from('profiles').select('avatar_id, avatar_color').eq('id', effectiveUserId).single();
-      if (v1.error) throw v1.error;
-
-      return {
-        avatar_id: (v1.data as any)?.avatar_id ?? null,
-        avatar_color: (v1.data as any)?.avatar_color ?? null,
-        avatar_accessory: DEFAULT_AVATAR_ACCESSORY,
-        avatar_frame: DEFAULT_AVATAR_FRAME,
+      if (error) throw error;
+      return data as {
+        avatar_id: string | null;
+        avatar_color: string | null;
+        avatar_accessory: string | null;
+        avatar_frame: string | null;
+        avatar_eyes: string | null;
+        avatar_mouth: string | null;
       };
     },
     staleTime: 60_000,
   });
 
-  const finalAvatarId = (avatarId ?? data?.avatar_id ?? DEFAULT_AVATAR_ID) || DEFAULT_AVATAR_ID;
-  const finalColor = safeColor(avatarColor ?? data?.avatar_color);
-  const finalAccessoryId = normalizeAccessoryId(avatarAccessory ?? (data as any)?.avatar_accessory ?? DEFAULT_AVATAR_ACCESSORY);
-  const finalFrameId = normalizeFrameId(avatarFrame ?? (data as any)?.avatar_frame ?? DEFAULT_AVATAR_FRAME);
+  const finalAvatarId =
+    (avatarId !== undefined ? avatarId : data?.avatar_id) ?? DEFAULT_AVATAR_ID;
+  const finalColor = safeHexColor(
+    (avatarColor !== undefined ? avatarColor : data?.avatar_color) ?? '#FFFFFF'
+  );
+
+  const finalAccessory = normalizeAccessoryId(
+    (avatarAccessory !== undefined ? avatarAccessory : data?.avatar_accessory) ??
+      DEFAULT_AVATAR_ACCESSORY
+  );
+
+  const finalFrame = normalizeFrameId(
+    (avatarFrame !== undefined ? avatarFrame : data?.avatar_frame) ?? DEFAULT_AVATAR_FRAME
+  );
+
+  const finalEyes = normalizeEyesId(
+    (avatarEyes !== undefined ? avatarEyes : data?.avatar_eyes) ?? DEFAULT_AVATAR_EYES_ID
+  );
+
+  const finalMouth = normalizeMouthId(
+    (avatarMouth !== undefined ? avatarMouth : data?.avatar_mouth) ?? DEFAULT_AVATAR_MOUTH_ID
+  );
 
   const avatar = AVATARS.find((a) => a.id === finalAvatarId) ?? AVATARS[0];
 
   const borderRadius =
-    shape === 'circle' ? size / 2 : shape === 'rounded' ? Math.round(size * 0.22) : 0;
+    shape === 'circle'
+      ? size / 2
+      : shape === 'rounded'
+        ? Math.round(size * 0.22)
+        : 0;
 
   if (variant === 'head') {
-    // Headshot (circle)
     return (
       <AvatarHead
         avatarId={finalAvatarId}
         avatarColor={finalColor}
+        avatarAccessory={finalAccessory}
+        avatarFrame={finalFrame}
+        avatarEyes={finalEyes}
+        avatarMouth={finalMouth}
         size={size}
         zoom={zoom}
-        accessoryId={finalAccessoryId}
-        frameId={finalFrameId}
         style={style}
       />
     );
   }
 
-  // Full avatar
-  const frame = getFrameDef(finalFrameId);
-  const frameW = Math.max(0, Number(frame.borderWidth ?? 0));
-  const innerSize = Math.max(1, Math.round(size - frameW * 2));
-  const innerRadius =
-    shape === 'circle' ? innerSize / 2 : shape === 'rounded' ? Math.round(innerSize * 0.22) : 0;
-
-  const accessory = getAccessoryDef(finalAccessoryId);
-
+  // "Full" avatar (we only have heads now, so just show the head image)
   return (
     <View
       style={[
@@ -136,55 +153,23 @@ export default function UserAvatar({
           width: size,
           height: size,
           borderRadius,
-          borderWidth: frameW,
-          borderColor: frame.borderColor,
+          overflow: 'hidden',
+          backgroundColor: finalColor,
           alignItems: 'center',
           justifyContent: 'center',
         },
         style,
       ]}
     >
-      <View
+      <Image
+        source={avatar.head}
         style={{
-          width: innerSize,
-          height: innerSize,
-          borderRadius: innerRadius,
-          overflow: 'hidden',
-          backgroundColor: finalColor,
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: size,
+          height: size,
+          transform: [{ scale: zoom ?? 1.12 }],
         }}
-      >
-        <Image
-          source={avatar.full}
-          style={{
-            width: innerSize,
-            height: innerSize,
-            transform: [{ scale: zoom ?? 1.12 }],
-          }}
-          resizeMode="cover"
-        />
-
-        {finalAccessoryId !== 'none' ? (
-          <View
-            style={{
-              position: 'absolute',
-              right: 3,
-              bottom: 3,
-              minWidth: Math.max(18, Math.round(innerSize * 0.34)),
-              height: Math.max(18, Math.round(innerSize * 0.34)),
-              borderRadius: 999,
-              backgroundColor: 'rgba(255,255,255,0.92)',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: 'rgba(0,0,0,0.08)',
-            }}
-          >
-            <Text style={{ fontSize: Math.max(12, Math.round(innerSize * 0.18)) }}>{accessory.emoji}</Text>
-          </View>
-        ) : null}
-      </View>
+        resizeMode="cover"
+      />
     </View>
   );
 }
