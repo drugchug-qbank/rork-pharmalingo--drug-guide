@@ -181,7 +181,7 @@ export default function AvatarEditorScreen() {
       return;
     }
 
-    const unlocked = isAccessoryUnlocked(normalized, unlockedAccessories);
+    const unlocked = isAccessoryUnlocked(unlockedAccessories, normalized);
     if (!unlocked) {
       const price = getAccessoryPrice(normalized);
       Alert.alert(
@@ -205,7 +205,7 @@ export default function AvatarEditorScreen() {
       return;
     }
 
-    const unlocked = isFrameUnlocked(normalized, unlockedFrames);
+    const unlocked = isFrameUnlocked(unlockedFrames, normalized);
     if (!unlocked) {
       const price = getFramePrice(normalized);
       Alert.alert(
@@ -381,7 +381,7 @@ export default function AvatarEditorScreen() {
         <View style={styles.chipRow}>
           {AVATAR_ACCESSORIES.map((a) => {
             const active = a.id === normalizeAccessoryId(selectedAccessory);
-            const unlocked = isAccessoryUnlocked(a.id, unlockedAccessories);
+            const unlocked = isAccessoryUnlocked(unlockedAccessories, a.id);
             const price = getAccessoryPrice(a.id);
             const def = getAccessoryDef(a.id);
 
@@ -405,7 +405,7 @@ export default function AvatarEditorScreen() {
         <View style={styles.chipRow}>
           {AVATAR_FRAMES.map((f) => {
             const active = f.id === normalizeFrameId(selectedFrame);
-            const unlocked = isFrameUnlocked(f.id, unlockedFrames);
+            const unlocked = isFrameUnlocked(unlockedFrames, f.id);
             const price = getFramePrice(f.id);
             const def = getFrameDef(f.id);
 

@@ -1799,6 +1799,8 @@ const styles = StyleSheet.create({
   suggestLoadingText: { color: Colors.textSecondary, fontWeight: '700' as const, fontSize: 12 },
 
   suggestErrorText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
+  suggestErrorSubText: { color: Colors.textTertiary, fontWeight: '600' as const, fontSize: 11, paddingHorizontal: 12, paddingBottom: 8 },
+  suggestHintText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
   suggestEmptyText: { color: Colors.textTertiary, fontWeight: '700' as const, fontSize: 12, padding: 12 },
 
   suggestRow: {

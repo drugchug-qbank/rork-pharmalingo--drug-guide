@@ -35,6 +35,10 @@ export function getFrameDef(id: AvatarFrameId): AvatarFrameDef {
   return AVATAR_FRAMES.find((f) => f.id === id) ?? AVATAR_FRAMES[0];
 }
 
+export function getFramePrice(id: AvatarFrameId): number {
+  return getFrameDef(id).price;
+}
+
 export function isFrameUnlocked(unlocked: string[] | null | undefined, id: AvatarFrameId): boolean {
   const def = getFrameDef(id);
   if (def.price <= 0) return true;

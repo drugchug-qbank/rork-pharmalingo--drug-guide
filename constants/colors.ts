@@ -25,6 +25,8 @@ const Colors = {
   warningLight: '#FEF3C7',
   info: '#0EA5E9',
   infoLight: '#E0F2FE',
+  card: '#FFFFFF',
+  muted: '#94A3B8',
   shadow: 'rgba(14,165,233,0.1)',
   overlay: 'rgba(15,23,42,0.6)',
   coin: '#F59E0B',
