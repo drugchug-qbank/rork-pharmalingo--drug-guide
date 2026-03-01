@@ -16,7 +16,6 @@ import {
   AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
   Target,
@@ -81,6 +80,34 @@ function safeNumber(v: any, fallback = 0): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
+
+
+function safeHexColor(input?: string | null): string {
+  const c = String(input ?? '').trim();
+  return c.length > 0 ? c : '#FFFFFF';
+}
+
+function isLightHexColor(hex: string): boolean {
+  // Supports #RGB and #RRGGBB
+  const raw = hex.replace('#', '').trim();
+  if (raw.length === 3) {
+    const r = parseInt(raw[0] + raw[0], 16);
+    const g = parseInt(raw[1] + raw[1], 16);
+    const b = parseInt(raw[2] + raw[2], 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.78;
+  }
+  if (raw.length >= 6) {
+    const r = parseInt(raw.slice(0, 2), 16);
+    const g = parseInt(raw.slice(2, 4), 16);
+    const b = parseInt(raw.slice(4, 6), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.78;
+  }
+  // If invalid, treat as dark so text becomes white.
+  return false;
+}
+
 
 function formatCountdown(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds || 0));
@@ -643,77 +670,85 @@ month_end: String(r.month_end ?? ''),
     };
   }, [banner.type]);
 
-  return (
+    const heroBg = safeHexColor(profile?.avatar_color);
+  const heroIsLight = isLightHexColor(heroBg);
+  const heroTextColor = heroIsLight ? '#0B0B0B' : '#FFFFFF';
+  const heroSubColor = heroIsLight ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.85)';
+
+return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={[Colors.primary, Colors.primaryDark]}
-        style={[styles.header, { paddingTop: insets.top + 12 }]}
-      >
-        <View style={styles.avatarContainer}>
-          <UserAvatar variant="head" size={110} shape="circle" />
-          <View style={styles.levelBadge}>
-            <Text style={styles.levelText}>Lv.{progress.level}</Text>
-          </View>
+          <View style={[styles.header, { paddingTop: insets.top + 12, backgroundColor: heroBg }]}>
+      <View style={styles.avatarContainer}>
+        <UserAvatar variant="head" size={140} shape="circle" style={[styles.heroAvatar, { borderColor: heroIsLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.85)' }]} />
+        <View style={styles.levelBadge}>
+          <Text style={styles.levelText}>Lv.{progress.level}</Text>
         </View>
-        <Text style={styles.profileTitle}>{profile?.display_name ?? profile?.username ?? 'Pharmacy Student'}</Text>
-        <Text style={styles.profileSubtitle}>
-          Level {progress.level} • {progress.stats.xpTotal} XP
-        </Text>
+      </View>
 
-        <View style={styles.headerStatsRow}>
-          <View style={styles.headerStat}>
-            <View style={styles.headerStatIcon}>
-              <StreakFlameIcon size={20} />
-            </View>
-            <Text style={styles.headerStatValue}>{streakCurrent}</Text>
-            <Text style={styles.headerStatLabel}>Streak</Text>
-          </View>
-          <View style={styles.headerStatDivider} />
-          <View style={styles.headerStat}>
-            <View style={styles.headerStatIcon}>
-              <Target size={16} color={Colors.primaryDark} strokeWidth={2.6} />
-            </View>
-            <Text style={styles.headerStatValue}>{accuracy}%</Text>
-            <Text style={styles.headerStatLabel}>Accuracy</Text>
-          </View>
-          <View style={styles.headerStatDivider} />
-          <View style={styles.headerStat}>
-            <View style={styles.headerStatIcon}>
-              <BookOpen size={16} color="#8B5CF6" strokeWidth={2.6} />
-            </View>
-            <Text style={styles.headerStatValue}>{totalLessonsCompleted}</Text>
-            <Text style={styles.headerStatLabel}>Lessons</Text>
-          </View>
-        </View>
-
-        <View style={[styles.streakBanner, { backgroundColor: bannerColors.bg, borderColor: bannerColors.border }]}>
-          <View style={styles.streakBannerLeft}>
-            <View style={[styles.streakBannerIconBg, { backgroundColor: bannerColors.chip }]}>
-              {streakStatusLoading ? (
-                <ActivityIndicator size="small" color={bannerColors.icon} />
-              ) : (
-                <Clock size={18} color={bannerColors.icon} />
-              )}
-            </View>
-            <View style={styles.streakBannerText}>
-              <Text style={styles.streakBannerTitle}>{banner.title}</Text>
-              <Text style={styles.streakBannerSubtitle}>{banner.subtitle}</Text>
-            </View>
-          </View>
-
-          {banner.pill ? (
-            <View style={[styles.streakBannerPill, { backgroundColor: bannerColors.chip }]}>
-              <Text style={styles.streakBannerPillText}>{banner.pill}</Text>
-            </View>
-          ) : null}
-        </View>
-      </LinearGradient>
+      <Text style={[styles.profileTitle, { color: heroTextColor }]}>
+        {profile?.display_name ?? profile?.username ?? 'You'}
+      </Text>
+      <Text style={[styles.profileSubtitle, { color: heroSubColor }]}>
+        Level {progress.level} • {(progress.stats.totalXp ?? 0).toLocaleString()} XP
+      </Text>
+    </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.headerStatsRow}>
+                  <View style={styles.headerStat}>
+                    <View style={styles.headerStatIcon}>
+                      <StreakFlameIcon size={20} />
+                    </View>
+                    <Text style={styles.headerStatValue}>{streakCurrent}</Text>
+                    <Text style={styles.headerStatLabel}>Streak</Text>
+                  </View>
+                  <View style={styles.headerStatDivider} />
+                  <View style={styles.headerStat}>
+                    <View style={styles.headerStatIcon}>
+                      <Target size={16} color={Colors.primaryDark} strokeWidth={2.6} />
+                    </View>
+                    <Text style={styles.headerStatValue}>{accuracy}%</Text>
+                    <Text style={styles.headerStatLabel}>Accuracy</Text>
+                  </View>
+                  <View style={styles.headerStatDivider} />
+                  <View style={styles.headerStat}>
+                    <View style={styles.headerStatIcon}>
+                      <BookOpen size={16} color="#8B5CF6" strokeWidth={2.6} />
+                    </View>
+                    <Text style={styles.headerStatValue}>{totalLessonsCompleted}</Text>
+                    <Text style={styles.headerStatLabel}>Lessons</Text>
+                  </View>
+                </View>
+
+        
+
+        <View style={[styles.streakBanner, { backgroundColor: bannerColors.bg, borderColor: bannerColors.border }]}>
+                  <View style={styles.streakBannerLeft}>
+                    <View style={[styles.streakBannerIconBg, { backgroundColor: bannerColors.chip }]}>
+                      {streakStatusLoading ? (
+                        <ActivityIndicator size="small" color={bannerColors.icon} />
+                      ) : (
+                        <Clock size={18} color={bannerColors.icon} />
+                      )}
+                    </View>
+                    <View style={styles.streakBannerText}>
+                      <Text style={styles.streakBannerTitle}>{banner.title}</Text>
+                      <Text style={styles.streakBannerSubtitle}>{banner.subtitle}</Text>
+                    </View>
+                  </View>
+
+                  {banner.pill ? (
+                    <View style={[styles.streakBannerPill, { backgroundColor: bannerColors.chip }]}>
+                      <Text style={styles.streakBannerPillText}>{banner.pill}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+
         {/* Profession */}
         <Pressable
           style={styles.schoolCard}
@@ -937,6 +972,7 @@ const styles = StyleSheet.create({
 
   header: { alignItems: 'center', paddingBottom: 18, paddingHorizontal: 20 },
   avatarContainer: { position: 'relative', marginBottom: 12 },
+  heroAvatar: { borderWidth: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 6 },
   levelBadge: {
     position: 'absolute',
     bottom: -4,
@@ -953,31 +989,29 @@ const styles = StyleSheet.create({
   profileSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.9)', marginTop: 4, fontWeight: '700' as const },
 
   headerStatsRow: {
+    marginTop: 16,
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(240, 249, 255, 0.34)',
-    borderWidth: 2.5,
-    borderColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 20,
-    marginTop: 16,
+    justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 12,
-    width: '100%',
+    borderRadius: 20,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 2,
   },
+
   headerStat: { flex: 1, alignItems: 'center', gap: 4 },
-  headerStatIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(240, 249, 255, 0.26)',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.90)',
-  },
-  headerStatValue: { fontSize: 20, fontWeight: '900' as const, color: '#FFFFFF' },
-  headerStatLabel: { fontSize: 11, color: 'rgba(255,255,255,0.82)', fontWeight: '700' as const },
-  headerStatDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.25)' },
+  headerStatIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primaryLight, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)' },
+  headerStatValue: { fontSize: 20, fontWeight: '900', color: Colors.text },
+  headerStatLabel: { fontSize: 11, color: Colors.muted, marginTop: 2, fontWeight: '700' },
+  headerStatDivider: { width: 1, height: 36, backgroundColor: Colors.border },
 
   streakBanner: {
     marginTop: 12,
