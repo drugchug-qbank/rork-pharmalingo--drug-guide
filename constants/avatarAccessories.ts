@@ -1,8 +1,3 @@
-// Avatar accessories (cosmetics) + helper functions
-//
-// NOTE: This file is intentionally small + stable, because it's imported by UI screens.
-// Keep exports backward-compatible.
-
 export type AvatarAccessoryId =
   | 'none'
   | 'crown'
@@ -12,63 +7,45 @@ export type AvatarAccessoryId =
   | 'book'
   | 'heart';
 
+export const DEFAULT_AVATAR_ACCESSORY: AvatarAccessoryId = 'none';
+
 export type AvatarAccessoryDef = {
   id: AvatarAccessoryId;
   label: string;
-  /** Optional image overlay (recommended). If omitted, UI can fall back to emoji/text. */
-  image?: any;
-  /**
-   * Scale multiplier applied in AvatarHead.
-   * 1.0 = fill the avatar circle.
-   */
-  scale?: number;
-  /**
-   * Price in coins (for future shop/unlocks).
-   * 0 means free.
-   */
+  emoji: string;
+  /** Coin cost to unlock (0 = free) */
   price: number;
+  /** If true, newly created profiles should start with this unlocked */
+  defaultUnlocked?: boolean;
 };
 
-// If you add new accessories, also update AvatarAccessoryId above.
+// ⚠️ Keep this list small/simple for now — we can tweak prices and visuals later.
 export const AVATAR_ACCESSORIES: AvatarAccessoryDef[] = [
-  { id: 'none', label: 'None', price: 0 },
-
-  // You can replace these with proper PNG overlays later.
-  // Keeping prices here makes it easy to build the Shop/unlocks flow.
-  { id: 'crown', label: 'Crown', price: 250 },
-  { id: 'star', label: 'Star', price: 150 },
-  { id: 'sparkle', label: 'Sparkle', price: 200 },
-  { id: 'pill', label: 'Pill', price: 100 },
-  { id: 'book', label: 'Book', price: 100 },
-  { id: 'heart', label: 'Heart', price: 75 },
+  { id: 'none', label: 'None', emoji: '🚫', price: 0, defaultUnlocked: true },
+  { id: 'crown', label: 'Crown', emoji: '👑', price: 120 },
+  { id: 'star', label: 'Star', emoji: '⭐️', price: 80 },
+  { id: 'sparkle', label: 'Sparkle', emoji: '✨', price: 60 },
+  { id: 'pill', label: 'Pill', emoji: '💊', price: 40 },
+  { id: 'book', label: 'Book', emoji: '📚', price: 40 },
+  { id: 'heart', label: 'Heart', emoji: '❤️', price: 0, defaultUnlocked: true },
 ];
 
-export function normalizeAccessoryId(input?: string | null): AvatarAccessoryId {
-  const v = String(input ?? '').trim().toLowerCase();
-  const found = AVATAR_ACCESSORIES.find((a) => a.id === (v as AvatarAccessoryId));
-  return (found?.id ?? 'none') as AvatarAccessoryId;
+export function normalizeAccessoryId(input: any): AvatarAccessoryId {
+  const raw = String(input ?? '')
+    .trim()
+    .toLowerCase();
+
+  const ids = new Set(AVATAR_ACCESSORIES.map((a) => a.id));
+  return (ids.has(raw as AvatarAccessoryId) ? (raw as AvatarAccessoryId) : DEFAULT_AVATAR_ACCESSORY);
 }
 
-export function getAccessoryDef(input?: string | null): AvatarAccessoryDef {
-  const id = normalizeAccessoryId(input);
+export function getAccessoryDef(id: AvatarAccessoryId): AvatarAccessoryDef {
   return AVATAR_ACCESSORIES.find((a) => a.id === id) ?? AVATAR_ACCESSORIES[0];
 }
 
-/**
- * ✅ FIX: some screens call getAccessoryPrice(), but older versions of this file didn't export it.
- */
-export function getAccessoryPrice(input?: string | null): number {
-  return getAccessoryDef(input).price ?? 0;
-}
-
-/**
- * Placeholder unlock logic.
- *
- * Later, when you add an avatar shop, you can replace this with:
- * - a Supabase table of unlocked cosmetics
- * - or a JSON array in profiles
- */
-export function isAccessoryUnlocked(_accessoryId: AvatarAccessoryId, _unlockedIds?: string[] | null): boolean {
-  // For now, everything is unlocked.
-  return true;
+export function isAccessoryUnlocked(unlocked: string[] | null | undefined, id: AvatarAccessoryId): boolean {
+  const def = getAccessoryDef(id);
+  if (def.price <= 0) return true;
+  const set = new Set((unlocked ?? []).map((x) => String(x).trim().toLowerCase()));
+  return set.has(id);
 }
