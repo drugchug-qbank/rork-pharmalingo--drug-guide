@@ -670,7 +670,7 @@ month_end: String(r.month_end ?? ''),
     };
   }, [banner.type]);
 
-    const heroBg = safeHexColor((profile as any)?.avatar_color);
+    const heroBg = safeHexColor(profile?.avatar_color);
   const heroIsLight = isLightHexColor(heroBg);
   const heroTextColor = heroIsLight ? '#0B0B0B' : '#FFFFFF';
   const heroSubColor = heroIsLight ? 'rgba(0,0,0,0.65)' : 'rgba(255,255,255,0.85)';
@@ -689,7 +689,7 @@ return (
         {profile?.display_name ?? profile?.username ?? 'You'}
       </Text>
       <Text style={[styles.profileSubtitle, { color: heroSubColor }]}>
-        Level {progress.level} • {(progress.stats.xpTotal ?? 0).toLocaleString()} XP
+        Level {progress.level} • {(progress.stats.totalXp ?? 0).toLocaleString()} XP
       </Text>
     </View>
 
@@ -799,7 +799,7 @@ return (
         </Pressable>
         
 <Pressable
-  onPress={() => router.push("/(tabs)/profile/avatar" as any)}
+  onPress={() => router.push("/profile/avatar")}
   style={{
     backgroundColor: "white",
     borderRadius: 16,
@@ -1010,7 +1010,7 @@ const styles = StyleSheet.create({
   headerStat: { flex: 1, alignItems: 'center', gap: 4 },
   headerStatIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primaryLight, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)' },
   headerStatValue: { fontSize: 20, fontWeight: '900', color: Colors.text },
-  headerStatLabel: { fontSize: 11, color: Colors.textTertiary, marginTop: 2, fontWeight: '700' },
+  headerStatLabel: { fontSize: 11, color: Colors.muted, marginTop: 2, fontWeight: '700' },
   headerStatDivider: { width: 1, height: 36, backgroundColor: Colors.border },
 
   streakBanner: {

@@ -160,7 +160,7 @@ export default function TeachingSlides({ deck, onDone, onSkip }: Props) {
             {Math.min(factIndex + 1, slide.facts.length)}/{slide.facts.length} facts
           </Text>
 
-          <ProgressBar progress={progressPercent} />
+          <ProgressBar percent={progressPercent} />
         </View>
 
         <Pressable

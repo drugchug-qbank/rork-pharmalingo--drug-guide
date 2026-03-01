@@ -237,7 +237,7 @@ export default function ShopScreen() {
           description="Pick an avatar + color"
           price="FREE"
           priceType="free"
-          onPress={() => router.push('/(tabs)/profile/avatar' as any)}
+          onPress={() => router.push('/profile/avatar')}
           highlight
         />
 

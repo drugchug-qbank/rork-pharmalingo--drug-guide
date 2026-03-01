@@ -1,6 +1,5 @@
 import { QuizQuestion } from '@/constants/types';
-import { Drug } from '@/constants/types';
-import { drugs, getDrugsByIds } from '@/constants/drugData';
+import { Drug, drugs, getDrugsByIds } from '@/constants/drugData';
 import { chapters } from '@/constants/chapters';
 
 function uid(prefix: string): string {

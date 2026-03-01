@@ -1,7 +1,7 @@
 import React from "react";
 import { View, StyleSheet, ViewStyle } from "react-native";
 import { Image } from "expo-image";
-import { AVATARS, DEFAULT_AVATAR_ID } from "@/constants/avatars";
+import { getAvatar } from "@/constants/avatars";
 
 function safeHexColor(value?: string | null, fallback = "#EAF6FF") {
   if (!value) return fallback;
@@ -24,7 +24,7 @@ export default function AvatarFull({
   shape = "rounded",
   style,
 }: Props) {
-  const avatar = AVATARS.find((a) => a.id === (avatarId ?? DEFAULT_AVATAR_ID)) ?? AVATARS[0];
+  const avatar = getAvatar(avatarId);
   const bg = safeHexColor(avatarColor, "#EAF6FF");
 
   const radius = shape === "circle" ? size / 2 : 14;

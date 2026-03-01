@@ -690,9 +690,8 @@ export default function LessonScreen() {
       setMascotMessage(getRandomMessage(MASCOT_MESSAGES_INCORRECT));
 
       if (!isMistakesMode && currentQuestion.drugId && currentQuestion.phase !== 'intro') {
-        const mistakeDrugId = currentQuestion.drugId;
         setSessionMistakes(prev => [...prev, {
-          drugId: mistakeDrugId,
+          drugId: currentQuestion.drugId,
           questionType: currentQuestion.type,
           dateISO: new Date().toISOString(),
           lessonId: activeLessonIdForMistakes,
@@ -827,11 +826,10 @@ export default function LessonScreen() {
         setMascotMessage(getRandomMessage(MASCOT_MESSAGES_INCORRECT));
 
         if (!isMistakesMode && currentQuestion.drugId && currentQuestion.phase !== 'intro') {
-          const mistakeDrugId = currentQuestion.drugId;
           setSessionMistakes(prev => [
             ...prev,
             {
-              drugId: mistakeDrugId,
+              drugId: currentQuestion.drugId,
               questionType: currentQuestion.type,
               dateISO: new Date().toISOString(),
               lessonId: activeLessonIdForMistakes,

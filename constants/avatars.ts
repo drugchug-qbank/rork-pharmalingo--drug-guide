@@ -64,8 +64,8 @@ export const AVATARS: AvatarAsset[] = [
   {
     id: 'hedgehog',
     label: 'Hedgehog',
-    head: require('../assets/avatars/head_256/HedgeHog_Head.png'),
-    full: require('../assets/avatars/head_256/HedgeHog_Head.png'),
+    head: require('../assets/avatars/head_256/Hedgehog_Head.png'),
+    full: require('../assets/avatars/head_256/Hedgehog_Head.png'),
   },
   {
     id: 'horse',

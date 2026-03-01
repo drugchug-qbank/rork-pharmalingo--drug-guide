@@ -981,8 +981,8 @@ const leagueQuery = useQuery({
             <AvatarHead
               avatarId={u.avatar_id ?? 'beaver'}
               avatarColor={u.avatar_color}
-              avatarAccessory={u.avatar_accessory}
-              avatarFrame={u.avatar_frame}
+              accessoryId={u.avatar_accessory}
+              frameId={u.avatar_frame}
               size={34}
             />
           ) : (
@@ -1036,8 +1036,8 @@ const leagueQuery = useQuery({
                 <AvatarHead
                   avatarId={friend.avatar_id ?? 'beaver'}
                   avatarColor={friend.avatar_color}
-                  avatarAccessory={friend.avatar_accessory}
-                  avatarFrame={friend.avatar_frame}
+                  accessoryId={friend.avatar_accessory}
+                  frameId={friend.avatar_frame}
                   size={42}
                 />
               ) : (
@@ -1118,8 +1118,8 @@ const leagueQuery = useQuery({
   <AvatarHead
     avatarId={r.avatar_id ?? 'beaver'}
     avatarColor={r.avatar_color}
-    avatarAccessory={r.avatar_accessory}
-    avatarFrame={r.avatar_frame}
+    accessoryId={r.avatar_accessory}
+    frameId={r.avatar_frame}
     size={42}
   />
 ) : (
@@ -1153,8 +1153,8 @@ const leagueQuery = useQuery({
   <AvatarHead
     avatarId={r.avatar_id ?? 'beaver'}
     avatarColor={r.avatar_color}
-    avatarAccessory={r.avatar_accessory}
-    avatarFrame={r.avatar_frame}
+    accessoryId={r.avatar_accessory}
+    frameId={r.avatar_frame}
     size={42}
   />
 ) : (

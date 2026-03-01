@@ -43,10 +43,6 @@ export function getAccessoryDef(id: AvatarAccessoryId): AvatarAccessoryDef {
   return AVATAR_ACCESSORIES.find((a) => a.id === id) ?? AVATAR_ACCESSORIES[0];
 }
 
-export function getAccessoryPrice(id: AvatarAccessoryId): number {
-  return getAccessoryDef(id).price;
-}
-
 export function isAccessoryUnlocked(unlocked: string[] | null | undefined, id: AvatarAccessoryId): boolean {
   const def = getAccessoryDef(id);
   if (def.price <= 0) return true;
