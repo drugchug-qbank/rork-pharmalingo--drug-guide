@@ -57,6 +57,48 @@ function safeHexColor(input?: string | null, fallback = '#FFFFFF') {
   return fallback;
 }
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const raw = (hex ?? '').replace('#', '').trim();
+  const h =
+    raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
+
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return { r, g, b };
+}
+
+function isLightColor(hex: string): boolean {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return false;
+
+  // Relative luminance (WCAG)
+  const toLin = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+
+  const r = toLin(rgb.r);
+  const g = toLin(rgb.g);
+  const b = toLin(rgb.b);
+
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return L > 0.72;
+}
+
+function getReadableTextColor(bgHex: string): string {
+  return isLightColor(bgHex) ? '#0F172A' : '#FFFFFF';
+}
+
+function getReadableSubTextColor(bgHex: string): string {
+  return isLightColor(bgHex)
+    ? 'rgba(15,23,42,0.72)'
+    : 'rgba(255,255,255,0.90)';
+}
+
+
 const BG_COLORS = [
   '#FFFFFF',
   '#1D4ED8',
@@ -173,6 +215,16 @@ export default function AvatarEditorScreen() {
   });
 
   const headerBg = useMemo(() => safeHexColor(selectedColor, Colors.primary), [selectedColor]);
+  const headerIsLight = useMemo(() => isLightColor(headerBg), [headerBg]);
+  const headerTextColor = useMemo(() => getReadableTextColor(headerBg), [headerBg]);
+  const headerSubTextColor = useMemo(() => getReadableSubTextColor(headerBg), [headerBg]);
+
+  const headerCardBg = headerIsLight ? 'rgba(15,23,42,0.06)' : 'rgba(255,255,255,0.18)';
+  const headerCardBorder = headerIsLight ? 'rgba(15,23,42,0.12)' : 'rgba(255,255,255,0.28)';
+  const tabBg = headerIsLight ? 'rgba(15,23,42,0.08)' : 'rgba(255,255,255,0.18)';
+  const tabActiveBg = headerIsLight ? 'rgba(15,23,42,0.14)' : 'rgba(255,255,255,0.35)';
+  const tabActiveBorder = headerIsLight ? 'rgba(15,23,42,0.22)' : 'rgba(255,255,255,0.70)';
+
 
   const onPickAccessory = (id: string) => {
     const normalized = normalizeAccessoryId(id);
@@ -241,36 +293,35 @@ export default function AvatarEditorScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12, backgroundColor: headerBg }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12, backgroundColor: headerBg, borderBottomWidth: 1, borderBottomColor: headerCardBorder }]}>
         <View style={styles.headerTopRow}>
           <Pressable onPress={() => router.back()} hitSlop={10}>
-            <Text style={styles.headerBtn}>✕</Text>
+            <Text style={[styles.headerBtn, { color: headerTextColor }]}>✕</Text>
           </Pressable>
 
-          <Text style={styles.headerTitle}>Choose your avatar</Text>
+          <Text style={[styles.headerTitle, { color: headerTextColor }]}>Choose your avatar</Text>
 
           <Pressable
             onPress={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
             hitSlop={10}
           >
-            <Text style={[styles.headerBtn, { opacity: saveMutation.isPending ? 0.5 : 1 }]}>
+            <Text style={[styles.headerBtn, { color: headerTextColor, opacity: saveMutation.isPending ? 0.5 : 1 }]}>
               DONE
             </Text>
           </Pressable>
         </View>
 
-        <Text style={styles.headerSubtitle}>
-          Pick a character, background color, eyes, mouth, and accessories.
-        </Text>
+        <Text style={[styles.headerSubtitle, { color: headerSubTextColor }]}>Pick a character, background color, eyes, mouth, and accessories.</Text>
 
-        <View style={styles.previewCard}>
+        <View style={[styles.previewCard, { backgroundColor: headerCardBg, borderColor: headerCardBorder }]}>
           <View style={styles.previewTabs}>
             <Pressable
               onPress={() => setPreviewVariant('head')}
               style={[
                 styles.previewTab,
-                previewVariant === 'head' ? styles.previewTabActive : null,
+                { backgroundColor: tabBg, borderColor: headerCardBorder },
+                previewVariant === 'head' && { backgroundColor: tabActiveBg, borderColor: tabActiveBorder },
               ]}
             >
               <Text style={styles.previewTabText}>Head</Text>
@@ -279,7 +330,8 @@ export default function AvatarEditorScreen() {
               onPress={() => setPreviewVariant('full')}
               style={[
                 styles.previewTab,
-                previewVariant === 'full' ? styles.previewTabActive : null,
+                { backgroundColor: tabBg, borderColor: headerCardBorder },
+                previewVariant === 'full' && { backgroundColor: tabActiveBg, borderColor: tabActiveBorder },
               ]}
             >
               <Text style={styles.previewTabText}>Full</Text>
@@ -314,7 +366,8 @@ export default function AvatarEditorScreen() {
           </View>
 
           <View style={styles.coinRow}>
-            <Text style={styles.coinText}>Coins: {coinBalance}</Text>
+            <Text style={[styles.coinText, { color: headerTextColor }]}>
+            Coins: {coinBalance}</Text>
           </View>
         </View>
       </View>
